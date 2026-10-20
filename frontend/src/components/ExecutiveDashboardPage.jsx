@@ -414,7 +414,7 @@ export function ExecutiveDashboardPage({ onNavigate }) {
         <div className="space-y-1">
           <h4 className="font-bold text-body-sm text-[#00355f]">Regulatory Notice & Investigation Disclaimer</h4>
           <p className="text-xs text-[#42474f] leading-relaxed">
-            ForensiAIR identifies unusual patterns in wastewater telemetry that may indicate data-quality or data-integrity issues. Alerts are indicators for further investigation and do not establish deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify readings and operational records before drawing conclusions.
+            Forensier identifies unusual patterns in wastewater telemetry that may indicate data-quality or data-integrity issues. Alerts are indicators for further investigation and do not establish deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify readings and operational records before drawing conclusions.
           </p>
         </div>
       </div>

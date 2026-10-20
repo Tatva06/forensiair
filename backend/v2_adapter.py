@@ -1,9 +1,9 @@
 """
 backend/v2_adapter.py
 =====================
-Lightweight V2 Adapter for ForensiAIR Backend.
+Lightweight V2 Adapter for Forensier Backend.
 
-Integrates the validated ForensiAIR V2 detector artifacts (validation_v2/v2/model/)
+Integrates the validated Forensier V2 detector artifacts (validation_v2/v2/model/)
 into the application backend API without modifying existing V1 files or retraining models.
 
 Data Contracts:
@@ -32,7 +32,7 @@ V2_METHODS_CSV = os.path.join(V2_MODEL_DIR, "v2_methods_comparison.csv")
 
 # Regulatory & Legal Disclaimer
 MANDATORY_V2_DISCLAIMER = (
-    "ForensiAIR V2 detects statistical and mathematical anomalies in industrial telemetry under "
+    "Forensier V2 detects statistical and mathematical anomalies in industrial telemetry under "
     "a calibrated operating budget of 1.0 false alert per factory-month. Detections reflect "
     "synthetic anomalous behavior patterns and do not constitute legal or regulatory proof "
     "of deliberate physical tampering."
@@ -152,7 +152,7 @@ class V2BackendAdapter:
     def get_model_info(self) -> Dict[str, Any]:
         """Returns verified V2 model architecture, feature specifications, and reconciled metrics."""
         return {
-            "model_name": "ForensiAIR V2 Causal Supervised Detector",
+            "model_name": "Forensier V2 Causal Supervised Detector",
             "model_version": "2.0.0-frozen",
             "specification": "docs/PROTOCOL_v2.md & PROTOCOL_v1.1 Section C",
             "architecture": "HistGradientBoostingClassifier (max_depth=6, lr=0.1, max_iter=200, l2=1.0, balanced class weights, random_state=42)",

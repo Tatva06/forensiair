@@ -2,7 +2,7 @@
 backend/reports_service.py
 ==========================
 Database storage, schema initialization, validation, and business logic
-for ForensiAIR Inspection Verification Reports.
+for Forensier Inspection Verification Reports.
 
 Data tables in forensier.db:
 - inspection_reports: Persists report details, status, outcome, evidence, and admin reviews.
@@ -145,6 +145,32 @@ def find_alert_details(alert_id: str) -> Optional[Dict[str, Any]]:
                 "timestamp": str(erow["start_dt"]),
                 "source": "v2_evaluation_events"
             }
+
+    # 3. Check for Routine / Scheduled / Ad-hoc surveillance reports
+    if alert_str.upper().startswith("ROUTINE-") or alert_str.upper().startswith("SCHEDULED-") or alert_str.upper().startswith("ADHOC-"):
+        parts = alert_str.split("-")
+        fid = parts[1] if len(parts) > 1 else "site_001"
+        conn = get_db_connection()
+        try:
+            f_row = conn.execute("SELECT name FROM factories WHERE factory_id = ?", (fid,)).fetchone()
+            if not f_row:
+                from backend.v2_adapter import FACTORY_NAMES
+                fname = FACTORY_NAMES.get(fid, (f"Industrial Site {fid}", "Taloja", "Chemical Manufacturing"))[0]
+            else:
+                fname = f_row["name"]
+            
+            return {
+                "alert_id": alert_str,
+                "factory_id": fid,
+                "factory_name": fname,
+                "alert_type": "Routine Regulatory Surveillance",
+                "severity": "routine",
+                "message": "Routine unannounced regulatory surveillance audit",
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "source": "routine_surveillance"
+            }
+        finally:
+            conn.close()
 
     return None
 

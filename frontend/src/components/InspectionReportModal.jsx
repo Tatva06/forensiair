@@ -4,20 +4,21 @@ import {
   FileText,
   CheckCircle2,
   AlertTriangle,
-  Clock,
   ShieldCheck,
   Send,
   Save,
-  HelpCircle,
   History,
   User,
-  Calendar,
   Building2,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp
+  Paperclip,
+  Upload,
+  File,
+  Trash2,
+  Download,
+  Printer
 } from 'lucide-react';
 import { apiFetch } from '../config';
+import { exportReportToPrint } from '../utils/reportExport';
 
 const CHECK_OPTIONS = [
   { id: 'sensor_condition_and_calibration', label: 'Sensor probe condition, zero-drift & field calibration' },
@@ -84,11 +85,20 @@ export function InspectionReportModal({
     doc_reference: '',
     maintenance_log: '',
     sample_id: '',
-    other: ''
+    other: '',
+    supporting_reason: '',
+    attachments: []
   });
   const [adminNotes, setAdminNotes] = useState('');
   const [adminDecision, setAdminDecision] = useState('Reviewed');
   const [revisions, setRevisions] = useState([]);
+
+  // State for creating new reports without a pre-linked alert
+  const [availableFactories, setAvailableFactories] = useState([]);
+  const [selectedFacId, setSelectedFacId] = useState('');
+  const [availableAlerts, setAvailableAlerts] = useState([]);
+  const [selectedAlertMode, setSelectedAlertMode] = useState('routine'); // 'routine' or 'alert'
+  const [selectedAlertId, setSelectedAlertId] = useState('');
 
   const isAdmin = currentUser?.role === 'admin';
   const isReadOnly = reportStatus === 'Submitted for Review' && !isAdmin;
@@ -104,9 +114,49 @@ export function InspectionReportModal({
         fetchExistingReport(reportId);
       } else if (alertId) {
         checkAlertReport(alertId);
+      } else {
+        initNewReport();
       }
     }
   }, [isOpen, reportId, alertId]);
+
+  const initNewReport = async () => {
+    setCurrentReportId(null);
+    setReportStatus('Draft');
+    setInspectionDate(new Date().toISOString().slice(0, 10));
+    setChecksPerformed([]);
+    setOtherChecksDesc('');
+    setFindings('');
+    setOutcome('inconclusive');
+    setEvidenceRefs({ doc_reference: '', maintenance_log: '', sample_id: '', other: '', supporting_reason: '', attachments: [] });
+    setRevisions([]);
+    setLinkedAlert(null);
+    setSelectedAlertMode('routine');
+    setSelectedAlertId('');
+    setLoading(true);
+
+    try {
+      const [facRes, alRes] = await Promise.all([
+        apiFetch('/api/factories'),
+        apiFetch('/api/v2/alerts?limit=100&detected_only=true')
+      ]);
+      if (facRes.ok) {
+        const facs = await facRes.json();
+        setAvailableFactories(facs || []);
+        if (facs && facs.length > 0) {
+          setSelectedFacId(facs[0].factory_id);
+        }
+      }
+      if (alRes.ok) {
+        const alData = await alRes.json();
+        setAvailableAlerts(alData.alerts || []);
+      }
+    } catch (err) {
+      console.error('Failed to load factories or alerts for new report:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchExistingReport = async (rid) => {
     setLoading(true);
@@ -145,7 +195,7 @@ export function InspectionReportModal({
       setOtherChecksDesc('');
       setFindings('');
       setOutcome('inconclusive');
-      setEvidenceRefs({ doc_reference: '', maintenance_log: '', sample_id: '', other: '' });
+      setEvidenceRefs({ doc_reference: '', maintenance_log: '', sample_id: '', other: '', attachments: [] });
       setRevisions([]);
       if (alertData) {
         setLinkedAlert(alertData);
@@ -169,7 +219,9 @@ export function InspectionReportModal({
       doc_reference: data.evidence_references?.doc_reference || '',
       maintenance_log: data.evidence_references?.maintenance_log || '',
       sample_id: data.evidence_references?.sample_id || '',
-      other: data.evidence_references?.other || ''
+      other: data.evidence_references?.other || '',
+      supporting_reason: data.evidence_references?.supporting_reason || '',
+      attachments: data.evidence_references?.attachments || []
     });
     setAdminNotes(data.admin_notes || '');
     setAdminDecision(data.admin_decision || 'Reviewed');
@@ -186,13 +238,90 @@ export function InspectionReportModal({
     );
   };
 
+  const handleFileUpload = (e) => {
+    if (isReadOnly || isReviewed) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    files.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        setErrorMsg(`File "${file.name}" exceeds the 10MB limit.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (loadEvt) => {
+        const newAttachment = {
+          id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: file.name,
+          size: file.size < 1024 * 1024
+            ? `${(file.size / 1024).toFixed(1)} KB`
+            : `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          type: file.type || 'application/octet-stream',
+          dataUrl: loadEvt.target.result,
+          uploadedAt: new Date().toISOString()
+        };
+        setEvidenceRefs(prev => ({
+          ...prev,
+          attachments: [...(prev.attachments || []), newAttachment]
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removeAttachment = (attId) => {
+    if (isReadOnly || isReviewed) return;
+    setEvidenceRefs(prev => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter(a => a.id !== attId)
+    }));
+  };
+
+  const buildReportData = () => ({
+    report_id: currentReportId || 'RPT-DRAFT',
+    alert_id: alertId || linkedAlert?.alert_id || (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : 'Routine'),
+    factory_id: linkedAlert?.factory_id || selectedFacId || 'N/A',
+    factory_name: linkedAlert?.factory_name || availableFactories.find(f => f.factory_id === selectedFacId)?.name || 'Facility',
+    inspection_date: inspectionDate,
+    inspector_id: currentUser?.username || 'inspector',
+    inspector_name: currentUser?.full_name || currentUser?.username || 'Field Inspector',
+    checks_performed: checksPerformed,
+    other_checks_description: otherChecksDesc,
+    findings: findings,
+    outcome: outcome,
+    evidence_references: evidenceRefs,
+    status: reportStatus,
+    admin_notes: adminNotes,
+    admin_decision: adminDecision,
+    reviewed_by: reportStatus === 'Reviewed' ? (currentUser?.role === 'admin' ? currentUser.username : 'Regional Administrator') : null,
+    reviewed_at: reportStatus === 'Reviewed' ? new Date().toISOString() : null,
+    revisions: revisions,
+    linked_alert: linkedAlert
+  });
+
+  const handleDownloadReport = () => {
+    exportReportToPrint(buildReportData());
+  };
+
   const handleSaveDraft = async () => {
     setSaving(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const effectiveAlertId =
+      alertId ||
+      linkedAlert?.alert_id ||
+      (selectedAlertMode === 'alert' && selectedAlertId ? selectedAlertId : (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : null));
+
+    if (!effectiveAlertId) {
+      setErrorMsg('Please select a target facility or active anomaly alert before saving.');
+      setSaving(false);
+      return;
+    }
+
     const payload = {
-      alert_id: alertId || linkedAlert?.alert_id,
+      alert_id: effectiveAlertId,
       inspection_date: inspectionDate,
       checks_performed: checksPerformed,
       other_checks_description: otherChecksDesc,
@@ -242,6 +371,16 @@ export function InspectionReportModal({
       return;
     }
 
+    const effectiveAlertId =
+      alertId ||
+      linkedAlert?.alert_id ||
+      (selectedAlertMode === 'alert' && selectedAlertId ? selectedAlertId : (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : null));
+
+    if (!effectiveAlertId) {
+      setErrorMsg('Please select a target facility or active anomaly alert before submitting.');
+      return;
+    }
+
     setSaving(true);
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -254,7 +393,7 @@ export function InspectionReportModal({
         const createRes = await apiFetch(`/api/reports`, {
           method: 'POST',
           body: JSON.stringify({
-            alert_id: alertId || linkedAlert?.alert_id,
+            alert_id: effectiveAlertId,
             inspection_date: inspectionDate,
             checks_performed: checksPerformed,
             other_checks_description: otherChecksDesc,
@@ -370,13 +509,13 @@ export function InspectionReportModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {/* Status Badge */}
-            <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-              reportStatus === 'Reviewed' ? 'bg-[#e8f5e9] text-[#1b6d24] border border-[#1b6d24]/30' :
-              reportStatus === 'Submitted for Review' ? 'bg-[#e7f0f8] text-[#00355f] border border-[#00355f]/30' :
-              reportStatus === 'Further Information Required' ? 'bg-[#fff3e6] text-[#F57C00] border border-[#F57C00]/30' :
-              'bg-[#f2f4f6] text-[#727780] border border-[#E5E7EB]'
+            <span className={`badge-status ${
+              reportStatus === 'Reviewed' ? 'badge-status-reviewed' :
+              reportStatus === 'Submitted for Review' ? 'badge-status-submitted' :
+              reportStatus === 'Further Information Required' ? 'badge-status-query' :
+              'badge-status-draft'
             }`}>
               {reportStatus}
             </span>
@@ -384,6 +523,7 @@ export function InspectionReportModal({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-[#727780] hover:bg-[#edeef0] transition-colors"
+              title="Close modal"
             >
               <X size={20} />
             </button>
@@ -411,7 +551,16 @@ export function InspectionReportModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-2xs flex items-center justify-center z-20">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#00355f]">
+                <div className="w-4 h-4 border-2 border-[#00355f] border-t-transparent rounded-full animate-spin" />
+                <span>Loading report details...</span>
+              </div>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-3 bg-[#fdecec] border border-[#D32F2F]/30 rounded-lg text-xs text-[#D32F2F] flex items-center gap-2">
               <AlertTriangle size={16} />
@@ -429,8 +578,8 @@ export function InspectionReportModal({
           {/* TAB 1: FORM */}
           {activeTab === 'form' && (
             <div className="space-y-6 text-xs">
-              {/* Linked Alert Card */}
-              {linkedAlert && (
+              {/* Linked Alert Card OR New Report Facility Selector */}
+              {linkedAlert ? (
                 <div className="p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl space-y-2">
                   <div className="font-bold text-[#00355f] flex items-center gap-2 text-xs uppercase tracking-wider">
                     <AlertTriangle size={14} /> Linked Anomaly Signal
@@ -451,6 +600,92 @@ export function InspectionReportModal({
                       </span>
                     </div>
                   </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl space-y-3">
+                  <div className="font-bold text-[#00355f] flex items-center justify-between text-xs uppercase tracking-wider">
+                    <div className="flex items-center gap-2">
+                      <Building2 size={14} /> Target Facility & Inspection Scope
+                    </div>
+                    <span className="text-[10px] text-[#727780] font-normal">Select facility to file report</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Select Facility <span className="text-[#D32F2F]">*</span></label>
+                      <select
+                        value={selectedFacId}
+                        disabled={isReadOnly || isReviewed || !!currentReportId}
+                        onChange={(e) => {
+                          setSelectedFacId(e.target.value);
+                          setSelectedAlertId('');
+                        }}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#191c1e] font-medium focus:outline-none focus:border-[#00355f]"
+                      >
+                        {availableFactories.length === 0 ? (
+                          <option value="">Loading facilities...</option>
+                        ) : (
+                          availableFactories.map(f => (
+                            <option key={f.factory_id} value={f.factory_id}>
+                              {f.factory_id}: {f.name || f.factory_name} ({f.region || 'Industrial Zone'})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Inspection Type</label>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                          <input
+                            type="radio"
+                            name="alertMode"
+                            checked={selectedAlertMode === 'routine'}
+                            onChange={() => setSelectedAlertMode('routine')}
+                            disabled={isReadOnly || isReviewed || !!currentReportId}
+                          />
+                          <span className="font-medium text-[#191c1e]">Routine / Scheduled</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                          <input
+                            type="radio"
+                            name="alertMode"
+                            checked={selectedAlertMode === 'alert'}
+                            onChange={() => setSelectedAlertMode('alert')}
+                            disabled={isReadOnly || isReviewed || !!currentReportId}
+                          />
+                          <span className="font-medium text-[#191c1e]">Link Anomaly Alert</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedAlertMode === 'alert' && (
+                    <div className="pt-2 border-t border-[#E5E7EB]">
+                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Choose Active Alert:</label>
+                      <select
+                        value={selectedAlertId}
+                        disabled={isReadOnly || isReviewed || !!currentReportId}
+                        onChange={(e) => setSelectedAlertId(e.target.value)}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#191c1e] font-mono focus:outline-none focus:border-[#00355f]"
+                      >
+                        <option value="">-- Choose alert from list --</option>
+                        {availableAlerts
+                          .filter(a => !selectedFacId || a.factory_id === selectedFacId)
+                          .map(a => (
+                            <option key={a.alert_id} value={a.alert_id}>
+                              {a.alert_id} — {a.parameter} {a.tamper_type || a.alert_type} ({a.severity})
+                            </option>
+                          ))}
+                      </select>
+                      {availableAlerts.filter(a => !selectedFacId || a.factory_id === selectedFacId).length === 0 && (
+                        <p className="text-[11px] text-[#F57C00] mt-1">
+                          No active alerts found for this facility. Will automatically register as a Routine Audit.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -494,16 +729,13 @@ export function InspectionReportModal({
                     return (
                       <label
                         key={chk.id}
-                        className={`p-3 rounded-lg border flex items-start gap-2.5 cursor-pointer transition-colors ${
-                          isChecked ? 'bg-[#e7f0f8]/60 border-[#00355f]' : 'bg-white border-[#E5E7EB] hover:bg-[#fafbfc]'
-                        } ${(isReadOnly || isReviewed) ? 'opacity-70 pointer-events-none' : ''}`}
+                        className={`check-item-card ${isChecked ? 'selected' : ''} ${(isReadOnly || isReviewed) ? 'disabled opacity-70 pointer-events-none' : ''}`}
                       >
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => handleCheckToggle(chk.id)}
                           disabled={isReadOnly || isReviewed}
-                          className="mt-0.5"
                         />
                         <span className="text-xs text-[#42474f] font-medium leading-tight">
                           {chk.label}
@@ -570,10 +802,72 @@ export function InspectionReportModal({
               </div>
 
               {/* Section E: Supporting Evidence References */}
-              <div className="space-y-3 p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl">
-                <div className="font-bold text-[#00355f] text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck size={14} /> Supporting Evidence References
+              <div className="space-y-4 p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl">
+                <div className="font-bold text-[#00355f] text-xs uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck size={14} /> Supporting Evidence & Compliance Rationale
+                  </span>
+                  <span className="text-[10px] text-[#727780] font-normal">Documents justifying outcome</span>
                 </div>
+
+                {/* Technical Justification / Documented Reason */}
+                <div>
+                  <label className="text-[11px] font-bold text-[#191c1e] block mb-1">
+                    Documented Reason & Technical Justification
+                  </label>
+                  <div className="space-y-1.5">
+                    <select
+                      disabled={isReadOnly || isReviewed}
+                      value={
+                        ['Sensor probe recalibration and zero-drift wash verified in plant maintenance log',
+                         'Process batch production paused / ETP plant shut down during telemetry episode',
+                         'Grab sample analysis conforms to effluent discharge CTO limits',
+                         'Telemetry deviation confirmed as physical tampering / sensor bypass conduit',
+                         'Flow meter pulse rate transmission buffer replay',
+                         'Inconclusive evidence: awaiting 5-day BOD laboratory results'].includes(evidenceRefs.supporting_reason)
+                          ? evidenceRefs.supporting_reason
+                          : evidenceRefs.supporting_reason ? 'Other' : ''
+                      }
+                      onChange={(e) => {
+                        if (e.target.value !== 'Other') {
+                          setEvidenceRefs({ ...evidenceRefs, supporting_reason: e.target.value });
+                        }
+                      }}
+                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#191c1e] font-medium focus:outline-none focus:border-[#00355f]"
+                    >
+                      <option value="">-- Select standard compliance justification / reason --</option>
+                      <option value="Sensor probe recalibration and zero-drift wash verified in plant maintenance log">
+                        Sensor probe recalibration and zero-drift wash verified in plant maintenance log
+                      </option>
+                      <option value="Process batch production paused / ETP plant shut down during telemetry episode">
+                        Process batch production paused / ETP plant shut down during telemetry episode
+                      </option>
+                      <option value="Grab sample analysis conforms to effluent discharge CTO limits">
+                        Grab sample analysis conforms to effluent discharge CTO limits
+                      </option>
+                      <option value="Telemetry deviation confirmed as physical tampering / sensor bypass conduit">
+                        Telemetry deviation confirmed as physical tampering / sensor bypass conduit
+                      </option>
+                      <option value="Flow meter pulse rate transmission buffer replay">
+                        Flow meter pulse rate transmission buffer replay
+                      </option>
+                      <option value="Inconclusive evidence: awaiting 5-day BOD laboratory results">
+                        Inconclusive evidence: awaiting 5-day BOD laboratory results
+                      </option>
+                      <option value="Other">Custom technical justification (enter below)</option>
+                    </select>
+
+                    <input
+                      type="text"
+                      disabled={isReadOnly || isReviewed}
+                      placeholder="Specific explanation of how attached documents justify or explain the outcome..."
+                      value={evidenceRefs.supporting_reason || ''}
+                      onChange={(e) => setEvidenceRefs({ ...evidenceRefs, supporting_reason: e.target.value })}
+                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#191c1e] focus:outline-none focus:border-[#00355f]"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] text-[#727780] block mb-1">
@@ -627,6 +921,120 @@ export function InspectionReportModal({
                       className="w-full bg-white border border-[#E5E7EB] rounded px-2.5 py-1.5 text-xs text-[#191c1e] focus:outline-none"
                     />
                   </div>
+                </div>
+
+                {/* Sub-section: Supporting File & Photo Attachments */}
+                <div className="pt-3 border-t border-[#E5E7EB] space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-[#191c1e] text-xs flex items-center gap-1.5">
+                        <Paperclip size={14} className="text-[#00355f]" />
+                        Supporting Files & Photographic Evidence ({evidenceRefs.attachments?.length || 0})
+                      </span>
+                      <p className="text-[11px] text-[#727780]">
+                        Attach sensor photos, ETP outfalls, grab sample seals, or scanned calibration PDFs (max 10MB per file).
+                      </p>
+                    </div>
+
+                    {!(isReadOnly || isReviewed) && (
+                      <label className="cursor-pointer bg-[#00355f] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-[#0f4c81] transition-colors shadow-xs self-start sm:self-auto">
+                        <Upload size={13} />
+                        <span>Attach Files / Photos</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*,.pdf,.doc,.docx,.txt,.csv"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Attachments List / Grid */}
+                  {(!evidenceRefs.attachments || evidenceRefs.attachments.length === 0) ? (
+                    <label className={`evidence-dropzone flex flex-col items-center justify-center gap-1.5 ${
+                      (isReadOnly || isReviewed) ? 'disabled opacity-75' : ''
+                    }`}>
+                      <div className="w-8 h-8 rounded-full bg-[#f2f4f6] text-[#727780] flex items-center justify-center">
+                        <Paperclip size={16} />
+                      </div>
+                      <p className="text-xs text-[#191c1e] font-bold">No files or photos attached</p>
+                      <p className="text-[11px] text-[#727780]">
+                        {!(isReadOnly || isReviewed)
+                          ? 'Click or drag files here to upload sensor photos, lab reports, or calibration certificates.'
+                          : 'No supporting documentation was uploaded for this report.'}
+                      </p>
+                      {!(isReadOnly || isReviewed) && (
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*,.pdf,.doc,.docx,.txt,.csv"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      )}
+                    </label>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {evidenceRefs.attachments.map((att) => {
+                        const isImg = att.type?.startsWith('image/') || att.dataUrl?.startsWith('data:image/');
+                        return (
+                          <div
+                            key={att.id}
+                            className="attachment-chip"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {isImg ? (
+                                <img
+                                  src={att.dataUrl}
+                                  alt={att.name}
+                                  className="w-10 h-10 object-cover rounded border border-[#E5E7EB] shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded bg-[#f2f4f6] text-[#00355f] flex items-center justify-center shrink-0">
+                                  <File size={20} />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-bold text-xs text-[#191c1e] truncate" title={att.name}>
+                                  {att.name}
+                                </p>
+                                <div className="flex items-center gap-2 text-[10px] text-[#727780]">
+                                  <span>{att.size}</span>
+                                  <span>•</span>
+                                  <span>{new Date(att.uploadedAt).toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <a
+                                href={att.dataUrl}
+                                download={att.name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Download / Open file"
+                                className="p-1.5 text-[#00355f] hover:bg-[#f2f4f6] rounded transition-colors"
+                              >
+                                <Download size={14} />
+                              </a>
+                              {!(isReadOnly || isReviewed) && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeAttachment(att.id)}
+                                  title="Remove attachment"
+                                  className="p-1.5 text-[#D32F2F] hover:bg-[#fdecec] rounded transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -742,6 +1150,15 @@ export function InspectionReportModal({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadReport}
+              className="flex items-center gap-1.5 px-4 py-2 border border-[#00355f] bg-[#e7f0f8] text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#d5e7f6] transition-colors"
+            >
+              <Printer size={14} />
+              <span>Download PDF</span>
+            </button>
+
             <button
               onClick={onClose}
               className="px-4 py-2 border border-[#E5E7EB] bg-white rounded-lg font-bold text-xs text-[#42474f] hover:bg-[#edeef0] transition-colors"

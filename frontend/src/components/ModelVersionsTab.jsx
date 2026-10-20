@@ -51,12 +51,12 @@ export function ModelVersionsTab() {
 
   return (
     <div className="p-6 space-y-8 max-w-5xl">
-      {/* SECTION 1: ForensiAIR V2 Causal Supervised Model */}
+      {/* SECTION 1: Forensier V2 Causal Supervised Model */}
       <div className="space-y-4">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div>
             <h3 className="font-headline-md text-headline-md text-[#00355f] flex items-center gap-2">
-              <span>ForensiAIR V2 Causal Supervised Detector</span>
+              <span>Forensier V2 Causal Supervised Detector</span>
             </h3>
             <p className="text-xs text-[#727780] mt-0.5">
               Protocol Frozen: <code className="font-mono bg-[#f8f9fb] px-1.5 py-0.5 rounded border border-[#E5E7EB]">v2-protocol-frozen</code> (Git: 8c98d3d2) · Stage 2 LOFO Evaluation
@@ -187,7 +187,7 @@ export function ModelVersionsTab() {
             Regulatory Notice & Investigation Disclaimer
           </h4>
           <p className="text-xs text-[#42474f] leading-relaxed">
-            ForensiAIR identifies unusual patterns in wastewater telemetry that may indicate data-quality
+            Forensier identifies unusual patterns in wastewater telemetry that may indicate data-quality
             or data-integrity issues. Alerts are indicators for further investigation and do not establish
             deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include
             sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify

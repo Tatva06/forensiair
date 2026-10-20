@@ -583,12 +583,12 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
         </div>
       </div>
 
-      {/* SECTION 2: ForensiAIR V2 Causal Supervised Model Evaluation */}
+      {/* SECTION 2: Forensier V2 Causal Supervised Model Evaluation */}
       <div className="bg-white border border-[#E5E7EB] rounded-xl p-6 shadow-xs space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-headline-md font-headline-md text-[#00355f] flex items-center gap-2">
-              <span>2. ForensiAIR V2 Supervised Anomaly Evaluation</span>
+              <span>2. Forensier V2 Supervised Anomaly Evaluation</span>
             </h2>
             <p className="text-xs text-[#727780] mt-0.5">
               Rigorous 5-fold Leave-One-Factory-Out cross-mechanism evaluation under the frozen protocol at a calibrated budget of 1.0 alert / factory-month.
@@ -1193,7 +1193,7 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
             Regulatory Notice & Investigation Disclaimer
           </h4>
           <p className="text-xs text-[#42474f] leading-relaxed">
-            ForensiAIR identifies unusual patterns in wastewater telemetry that may indicate data-quality
+            Forensier identifies unusual patterns in wastewater telemetry that may indicate data-quality
             or data-integrity issues. Alerts are indicators for further investigation and do not establish
             deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include
             sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify

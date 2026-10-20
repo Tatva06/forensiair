@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../config';
 import { InspectionReportModal } from './InspectionReportModal';
+import { exportReportToPrint } from '../utils/reportExport';
 
 export function AlertsPage({ onNavigate, currentUser }) {
   const [activeTab, setActiveTab] = useState('v2'); // 'v2' or 'legacy'
@@ -121,7 +122,7 @@ export function AlertsPage({ onNavigate, currentUser }) {
       `"${(a.evidence?.possible_explanations || '').replace(/"/g, '""')}"`,
       `"${(a.evidence?.recommended_checks?.join('; ') || '').replace(/"/g, '""')}"`,
       `"Historical Development Evaluation"`,
-      `"ForensiAIR identifies unusual patterns in wastewater telemetry that may indicate data-quality or data-integrity issues. Alerts are indicators for further investigation and do not establish deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify readings and operational records before drawing conclusions."`
+      `"Forensier identifies unusual patterns in wastewater telemetry that may indicate data-quality or data-integrity issues. Alerts are indicators for further investigation and do not establish deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify readings and operational records before drawing conclusions."`
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -129,7 +130,7 @@ export function AlertsPage({ onNavigate, currentUser }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `ForensiAIR_V2_Historical_Alerts_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Forensier_V2_Historical_Alerts_Report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -484,6 +485,27 @@ export function AlertsPage({ onNavigate, currentUser }) {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
+                          {repBadge.status !== 'none' && repBadge.reportId && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const res = await apiFetch(`/api/reports/${repBadge.reportId}`);
+                                  if (res.ok) {
+                                    const fullRep = await res.json();
+                                    exportReportToPrint(fullRep);
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                }
+                              }}
+                              title="Download Official PDF Report"
+                              className="px-2.5 py-1 bg-[#e7f0f8] border border-[#00355f]/30 text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#d5e7f6] flex items-center gap-1 transition-colors"
+                            >
+                              <Download size={13} />
+                              <span>Download PDF</span>
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -570,7 +592,7 @@ export function AlertsPage({ onNavigate, currentUser }) {
             Regulatory Notice & Investigation Disclaimer
           </h4>
           <p className="text-xs text-[#42474f] leading-relaxed">
-            ForensiAIR identifies unusual patterns in wastewater telemetry that may indicate data-quality
+            Forensier identifies unusual patterns in wastewater telemetry that may indicate data-quality
             or data-integrity issues. Alerts are indicators for further investigation and do not establish
             deliberate tampering, misconduct, or regulatory non-compliance. Possible explanations include
             sensor faults, maintenance, operational changes, missing data, and transmission issues. Verify

@@ -16,6 +16,7 @@ venv/
 # Environment & Temp Files
 .env
 .env.local
+.DS_Store
 *.log
 *.zip
 original_index.css.txt

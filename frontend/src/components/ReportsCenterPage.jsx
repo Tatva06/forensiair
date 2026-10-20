@@ -13,10 +13,12 @@ import {
   User,
   Calendar,
   Building2,
-  RefreshCw
+  RefreshCw,
+  Paperclip
 } from 'lucide-react';
 import { apiFetch } from '../config';
 import { InspectionReportModal } from './InspectionReportModal';
+import { exportReportToPrint } from '../utils/reportExport';
 
 const REPORT_YEAR = new Date().getFullYear();
 
@@ -92,6 +94,20 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
   const handleOpenReport = (rptId) => {
     setSelectedReportId(rptId);
     setIsReportModalOpen(true);
+  };
+
+  const handleDownloadReportDirect = async (r) => {
+    try {
+      const res = await apiFetch(`/api/reports/${r.report_id}`);
+      if (res.ok) {
+        const fullReport = await res.json();
+        exportReportToPrint(fullReport);
+      } else {
+        exportReportToPrint(r);
+      }
+    } catch (err) {
+      exportReportToPrint(r);
+    }
   };
 
   const handleNewReport = () => {
@@ -194,7 +210,7 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
         <div className="space-y-6">
           {/* KPI Dashboard Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-[#E5E7EB] p-5 rounded-xl shadow-xs space-y-1">
+            <div className="kpi-report-card kpi-card-total p-5 space-y-1">
               <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
                 <span>Total Verification Reports</span>
                 <FileText size={16} className="text-[#00355f]" />
@@ -203,16 +219,16 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               <p className="text-[11px] text-[#727780]">Registered on-site inspection dossiers</p>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] p-5 rounded-xl shadow-xs space-y-1">
+            <div className="kpi-report-card kpi-card-pending p-5 space-y-1">
               <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
                 <span>Pending Admin Review</span>
-                <Clock size={16} className="text-[#00355f]" />
+                <Clock size={16} className="text-[#0284c7]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#0f4c81]">{submittedCount}</div>
+              <div className="text-3xl font-bold font-mono text-[#0284c7]">{submittedCount}</div>
               <p className="text-[11px] text-[#727780]">Awaiting administrator approval</p>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] p-5 rounded-xl shadow-xs space-y-1">
+            <div className="kpi-report-card kpi-card-reviewed p-5 space-y-1">
               <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
                 <span>Reviewed & Verified</span>
                 <CheckCircle2 size={16} className="text-[#1b6d24]" />
@@ -221,7 +237,7 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               <p className="text-[11px] text-[#727780]">Compliance decision finalized</p>
             </div>
 
-            <div className="bg-white border border-[#E5E7EB] p-5 rounded-xl shadow-xs space-y-1">
+            <div className="kpi-report-card kpi-card-queries p-5 space-y-1">
               <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
                 <span>Drafts / Queries Open</span>
                 <AlertTriangle size={16} className="text-[#F57C00]" />
@@ -310,7 +326,13 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                     return (
                       <tr key={r.report_id} className="hover:bg-[#fafbfc] transition-colors">
                         <td className="p-3.5 font-mono font-bold text-[#00355f]">
-                          {r.report_id}
+                          <div>{r.report_id}</div>
+                          {r.evidence_references?.attachments?.length > 0 && (
+                            <div className="inline-flex items-center gap-1 text-[10px] text-[#00355f] font-sans font-semibold mt-0.5 bg-[#e7f0f8] px-1.5 py-0.5 rounded">
+                              <Paperclip size={10} />
+                              <span>{r.evidence_references.attachments.length} file{r.evidence_references.attachments.length > 1 ? 's' : ''}</span>
+                            </div>
+                          )}
                         </td>
                         <td className="p-3.5">
                           <div className="font-bold text-[#191c1e]">{r.factory_name || r.factory_id}</div>
@@ -336,22 +358,31 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                           </span>
                         </td>
                         <td className="p-3.5">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            r.status === 'Reviewed' ? 'bg-[#e8f5e9] text-[#1b6d24] border border-[#1b6d24]/30' :
-                            r.status === 'Submitted for Review' ? 'bg-[#e7f0f8] text-[#00355f] border border-[#00355f]/30' :
-                            r.status === 'Further Information Required' ? 'bg-[#fff3e6] text-[#F57C00] border border-[#F57C00]/30' :
-                            'bg-[#f2f4f6] text-[#727780] border border-[#E5E7EB]'
+                          <span className={`badge-status ${
+                            r.status === 'Reviewed' ? 'badge-status-reviewed' :
+                            r.status === 'Submitted for Review' ? 'badge-status-submitted' :
+                            r.status === 'Further Information Required' ? 'badge-status-query' :
+                            'badge-status-draft'
                           }`}>
                             {r.status}
                           </span>
                         </td>
                         <td className="p-3.5 text-right">
-                          <button
-                            onClick={() => handleOpenReport(r.report_id)}
-                            className="px-3 py-1 bg-white border border-[#00355f] text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#e7f0f8] transition-colors"
-                          >
-                            Open & Review
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleDownloadReportDirect(r)}
+                              title="Download / Print Official PDF Report"
+                              className="p-1.5 bg-[#e7f0f8] border border-[#00355f]/30 text-[#00355f] rounded-lg text-xs hover:bg-[#d5e7f6] transition-colors"
+                            >
+                              <Download size={13} />
+                            </button>
+                            <button
+                              onClick={() => handleOpenReport(r.report_id)}
+                              className="px-3 py-1 bg-white border border-[#00355f] text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#e7f0f8] transition-colors"
+                            >
+                              Open & Review
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
