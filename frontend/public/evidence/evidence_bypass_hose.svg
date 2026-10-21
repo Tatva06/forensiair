@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bg_effluent" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="35%" stop-color="#334155"/>
+      <stop offset="36%" stop-color="#3f2e18"/>
+      <stop offset="100%" stop-color="#261b0c"/>
+    </linearGradient>
+    <filter id="sh_red" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="3" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.8"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="url(#bg_effluent)"/>
+
+  <!-- Concrete Discharge Channel -->
+  <polygon points="0,210 800,210 750,600 50,600" fill="#2d1f10" stroke="#1e1408" stroke-width="4"/>
+  
+  <!-- Channel Weir / Edge -->
+  <rect x="0" y="190" width="800" height="30" fill="#64748b" stroke="#475569"/>
+
+  <!-- High-COD Dark Effluent Flow -->
+  <path d="M 100 240 Q 400 270 700 240 L 730 580 L 70 580 Z" fill="#451a03" opacity="0.85"/>
+
+  <!-- Legitimate OCEMS Sensor Well & Probe Body -->
+  <rect x="520" y="140" width="40" height="360" fill="#94a3b8" stroke="#334155" stroke-width="3"/>
+  <rect x="510" y="440" width="60" height="90" rx="8" fill="#1e293b" stroke="#00355f" stroke-width="3"/>
+  <text x="515" y="490" font-family="monospace" font-size="9" fill="#38bdf8" font-weight="bold">OCEMS PROBE</text>
+
+  <!-- ILLEGAL 2-inch Flexible Reinforced PVC Bypass Hose -->
+  <path d="M 0 320 C 180 340, 260 480, 490 490" fill="none" stroke="#15803d" stroke-width="26" stroke-linecap="round" filter="url(#sh_red)"/>
+  <path d="M 0 320 C 180 340, 260 480, 490 490" fill="none" stroke="#4ade80" stroke-width="6" stroke-dasharray="16,8"/>
+  
+  <!-- Clear Dilution Water Jetting Directly Across Probe Tip -->
+  <path d="M 490 490 Q 520 480 540 500 Q 520 520 485 500 Z" fill="#38bdf8" opacity="0.85"/>
+  <circle cx="510" cy="495" r="16" fill="#7dd3fc" opacity="0.7"/>
+
+  <!-- Yellow Crime Scene / Regulatory Evidence Marker #1 -->
+  <polygon points="180,380 230,380 215,310 195,310" fill="#facc15" stroke="#ca8a04" stroke-width="2" filter="url(#sh_red)"/>
+  <rect x="185" y="380" width="40" height="12" fill="#ca8a04"/>
+  <text x="200" y="360" font-family="Arial" font-size="28" fill="#000000" font-weight="900">1</text>
+  <text x="188" y="375" font-family="monospace" font-size="8" fill="#000" font-weight="bold">MPCB SEIZED</text>
+
+  <!-- Callout Alert Badge -->
+  <rect x="50" y="40" width="370" height="135" rx="8" fill="#450a0a" stroke="#ef4444" stroke-width="2.5" filter="url(#sh_red)"/>
+  <rect x="50" y="40" width="370" height="28" rx="8" fill="#dc2626"/>
+  <text x="62" y="60" font-family="Arial" font-size="12" fill="#ffffff" font-weight="bold">CONFIRMED TAMPERING: DILUTION BYPASS</text>
+  <text x="62" y="86" font-family="Arial" font-size="11" fill="#fecaca" font-weight="bold">Illegal 2-inch braided PVC hose discovered</text>
+  <text x="62" y="104" font-family="Arial" font-size="10" fill="#fca5a5">• Feeds cooling tower freshwater to sensor tip</text>
+  <text x="62" y="122" font-family="Arial" font-size="10" fill="#fca5a5">• Telemetry reported: 142 mg/L COD (Compliant)</text>
+  <text x="62" y="140" font-family="Arial" font-size="10" fill="#fca5a5">• Grab sample upstream: 890 mg/L COD (VIOLATION)</text>
+  <text x="62" y="162" font-family="Arial" font-size="11" fill="#fef08a" font-weight="bold">ACTION: Sec 33A Notice • Bank Guarantee Forfeit</text>
+  
+  <line x1="330" y1="175" x2="380" y2="440" stroke="#ef4444" stroke-width="2" stroke-dasharray="6"/>
+
+  <!-- Camera HUD -->
+  <rect x="20" y="535" width="460" height="45" rx="6" fill="#000000" opacity="0.85"/>
+  <text x="35" y="555" font-family="monospace" font-size="11" fill="#f8fafc">MPCB ENFORCEMENT • UNANNOUNCED NIGHT AUDIT</text>
+  <text x="35" y="570" font-family="monospace" font-size="10" fill="#f87171">2026-10-19 01:15:33 IST • SITE: M/s RAMDEV CHEMI-PHARMA (TALOJA)</text>
+</svg>

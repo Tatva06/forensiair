@@ -29,6 +29,8 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [outcomeFilter, setOutcomeFilter] = useState('ALL');
+  const [districtFilter, setDistrictFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReportId, setSelectedReportId] = useState(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -118,22 +120,37 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
   // Filter verification reports
   const filteredReports = reports.filter(r => {
     if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+    if (outcomeFilter !== 'ALL') {
+      if (outcomeFilter === 'explained' && r.outcome !== 'explained') return false;
+      if (outcomeFilter === 'tampering' && (r.outcome !== 'referred' && r.outcome !== 'unexplained')) return false;
+      if (outcomeFilter === 'inconclusive' && r.outcome !== 'inconclusive') return false;
+    }
+    if (districtFilter !== 'ALL') {
+      const qDist = districtFilter.toLowerCase();
+      const matchDistrict = (r.factory_name || '').toLowerCase().includes(qDist) ||
+                            (r.factory_id || '').toLowerCase().includes(qDist) ||
+                            factories.find(f => f.factory_id === r.factory_id)?.location?.toLowerCase()?.includes(qDist) ||
+                            factories.find(f => f.factory_id === r.factory_id)?.district?.toLowerCase()?.includes(qDist) ||
+                            factories.find(f => f.factory_id === r.factory_id)?.region?.toLowerCase()?.includes(qDist);
+      if (!matchDistrict) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = (r.factory_name || '').toLowerCase().includes(q);
       const matchId = (r.report_id || '').toLowerCase().includes(q);
       const matchAlert = (r.alert_id || '').toLowerCase().includes(q);
       const matchFindings = (r.findings || '').toLowerCase().includes(q);
-      if (!matchName && !matchId && !matchAlert && !matchFindings) return false;
+      const matchReason = (r.evidence_references?.supporting_reason || '').toLowerCase().includes(q);
+      if (!matchName && !matchId && !matchAlert && !matchFindings && !matchReason) return false;
     }
     return true;
   });
 
-  // KPI Metrics
+  // KPI Metrics by Verification Outcome
   const totalReportsCount = reports.length;
-  const submittedCount = reports.filter(r => r.status === 'Submitted for Review').length;
-  const reviewedCount = reports.filter(r => r.status === 'Reviewed').length;
-  const draftsCount = reports.filter(r => r.status === 'Draft' || r.status === 'Further Information Required').length;
+  const tamperingCount = reports.filter(r => r.outcome === 'referred' || r.outcome === 'unexplained').length;
+  const falsePositivesCount = reports.filter(r => r.outcome === 'explained').length;
+  const inconclusiveCount = reports.filter(r => r.outcome === 'inconclusive').length;
 
   // Filter factories for dossier view
   const filteredFactories = factories.filter(f => {
@@ -210,40 +227,68 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
         <div className="space-y-6">
           {/* KPI Dashboard Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="kpi-report-card kpi-card-total p-5 space-y-1">
+            <div
+              onClick={() => setOutcomeFilter('ALL')}
+              className={`p-5 rounded-xl border cursor-pointer transition-all ${
+                outcomeFilter === 'ALL'
+                  ? 'bg-white border-[#00355f] shadow-sm ring-1 ring-[#00355f]'
+                  : 'bg-white border-[#E5E7EB] hover:border-[#00355f]/40'
+              }`}
+            >
               <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
                 <span>Total Verification Reports</span>
                 <FileText size={16} className="text-[#00355f]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#00355f]">{totalReportsCount}</div>
-              <p className="text-[11px] text-[#727780]">Registered on-site inspection dossiers</p>
+              <div className="text-3xl font-bold font-mono text-[#00355f] mt-1">{totalReportsCount}</div>
+              <p className="text-[11px] text-[#727780]">Taloja &amp; Mahad enforcement dossiers</p>
             </div>
 
-            <div className="kpi-report-card kpi-card-pending p-5 space-y-1">
-              <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
-                <span>Pending Admin Review</span>
-                <Clock size={16} className="text-[#0284c7]" />
+            <div
+              onClick={() => setOutcomeFilter('tampering')}
+              className={`p-5 rounded-xl border cursor-pointer transition-all ${
+                outcomeFilter === 'tampering'
+                  ? 'bg-[#fdecec]/60 border-[#D32F2F] shadow-sm ring-1 ring-[#D32F2F]'
+                  : 'bg-white border-[#E5E7EB] hover:border-[#D32F2F]/40'
+              }`}
+            >
+              <div className="text-[10px] font-bold text-[#D32F2F] uppercase tracking-wider flex items-center justify-between">
+                <span>Confirmed Tampering</span>
+                <AlertTriangle size={16} className="text-[#D32F2F]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#0284c7]">{submittedCount}</div>
-              <p className="text-[11px] text-[#727780]">Awaiting administrator approval</p>
+              <div className="text-3xl font-bold font-mono text-[#D32F2F] mt-1">{tamperingCount}</div>
+              <p className="text-[11px] text-[#727780]">Closure notices &amp; guarantees seized</p>
             </div>
 
-            <div className="kpi-report-card kpi-card-reviewed p-5 space-y-1">
-              <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
-                <span>Reviewed & Verified</span>
+            <div
+              onClick={() => setOutcomeFilter('explained')}
+              className={`p-5 rounded-xl border cursor-pointer transition-all ${
+                outcomeFilter === 'explained'
+                  ? 'bg-[#e8f5e9]/60 border-[#1b6d24] shadow-sm ring-1 ring-[#1b6d24]'
+                  : 'bg-white border-[#E5E7EB] hover:border-[#1b6d24]/40'
+              }`}
+            >
+              <div className="text-[10px] font-bold text-[#1b6d24] uppercase tracking-wider flex items-center justify-between">
+                <span>False Positives (Verified)</span>
                 <CheckCircle2 size={16} className="text-[#1b6d24]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#1b6d24]">{reviewedCount}</div>
-              <p className="text-[11px] text-[#727780]">Compliance decision finalized</p>
+              <div className="text-3xl font-bold font-mono text-[#1b6d24] mt-1">{falsePositivesCount}</div>
+              <p className="text-[11px] text-[#727780]">Sensor faults &amp; scheduled overhauls</p>
             </div>
 
-            <div className="kpi-report-card kpi-card-queries p-5 space-y-1">
-              <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
-                <span>Drafts / Queries Open</span>
-                <AlertTriangle size={16} className="text-[#F57C00]" />
+            <div
+              onClick={() => setOutcomeFilter('inconclusive')}
+              className={`p-5 rounded-xl border cursor-pointer transition-all ${
+                outcomeFilter === 'inconclusive'
+                  ? 'bg-[#fff3e6]/60 border-[#F57C00] shadow-sm ring-1 ring-[#F57C00]'
+                  : 'bg-white border-[#E5E7EB] hover:border-[#F57C00]/40'
+              }`}
+            >
+              <div className="text-[10px] font-bold text-[#F57C00] uppercase tracking-wider flex items-center justify-between">
+                <span>Lab Results Pending</span>
+                <Clock size={16} className="text-[#F57C00]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#F57C00]">{draftsCount}</div>
-              <p className="text-[11px] text-[#727780]">Drafts or further info required</p>
+              <div className="text-3xl font-bold font-mono text-[#F57C00] mt-1">{inconclusiveCount}</div>
+              <p className="text-[11px] text-[#727780]">5-Day BOD incubation at Central Lab</p>
             </div>
           </div>
 
@@ -257,22 +302,51 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                   placeholder="Search facility, report ID, or findings..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-xs text-[#191c1e] focus:outline-none w-48 sm:w-64"
+                  className="bg-transparent text-xs text-[#191c1e] focus:outline-none w-48 sm:w-60"
                 />
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
+              {/* Outcome / Finding Filter */}
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-bold text-[#727780]">Outcome:</span>
+                <select
+                  value={outcomeFilter}
+                  onChange={(e) => setOutcomeFilter(e.target.value)}
+                  className="bg-[#f8f9fb] border border-[#E5E7EB] rounded px-2.5 py-1.5 font-bold text-[#00355f] focus:outline-none"
+                >
+                  <option value="ALL">All Outcomes</option>
+                  <option value="explained">False Positives (Explained)</option>
+                  <option value="tampering">Confirmed Tampering</option>
+                  <option value="inconclusive">Inconclusive (Lab Pending)</option>
+                </select>
+              </div>
+
+              {/* District Filter (Strictly Taloja & Mahad) */}
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-bold text-[#727780]">District:</span>
+                <select
+                  value={districtFilter}
+                  onChange={(e) => setDistrictFilter(e.target.value)}
+                  className="bg-[#f8f9fb] border border-[#E5E7EB] rounded px-2.5 py-1.5 font-bold text-[#00355f] focus:outline-none"
+                >
+                  <option value="ALL">All Industrial Zones</option>
+                  <option value="Taloja">Taloja MIDC</option>
+                  <option value="Mahad">Mahad MIDC</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-1.5 text-xs">
                 <span className="font-bold text-[#727780]">Status:</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-[#f8f9fb] border border-[#E5E7EB] rounded px-3 py-1.5 font-bold text-[#00355f] focus:outline-none"
+                  className="bg-[#f8f9fb] border border-[#E5E7EB] rounded px-2.5 py-1.5 font-bold text-[#00355f] focus:outline-none"
                 >
                   <option value="ALL">All Statuses</option>
+                  <option value="Reviewed">Reviewed &amp; Finalized</option>
                   <option value="Submitted for Review">Submitted for Review</option>
-                  <option value="Reviewed">Reviewed & Closed</option>
-                  <option value="Further Information Required">Further Info Required</option>
-                  <option value="Draft">Drafts Only</option>
+                  <option value="Draft">Drafts</option>
                 </select>
               </div>
             </div>
@@ -323,45 +397,72 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB]">
                   {filteredReports.map((r) => {
+                    const isFalsePositive = r.outcome === 'explained';
+                    const isTampering = r.outcome === 'referred' || r.outcome === 'unexplained';
+                    const isInconclusive = r.outcome === 'inconclusive';
+
+                    // Derive Taloja or Mahad region
+                    const facObj = factories.find(f => f.factory_id === r.factory_id);
+                    const region = facObj?.region || facObj?.district || facObj?.location ||
+                                   (r.factory_name?.toLowerCase().includes('mahad') || r.report_id?.includes('MHD') ? 'Mahad' : 'Taloja');
+
+                    const attCount = r.evidence_references?.attachments?.length || 0;
+
                     return (
                       <tr key={r.report_id} className="hover:bg-[#fafbfc] transition-colors">
                         <td className="p-3.5 font-mono font-bold text-[#00355f]">
                           <div>{r.report_id}</div>
-                          {r.evidence_references?.attachments?.length > 0 && (
-                            <div className="inline-flex items-center gap-1 text-[10px] text-[#00355f] font-sans font-semibold mt-0.5 bg-[#e7f0f8] px-1.5 py-0.5 rounded">
+                          {attCount > 0 && (
+                            <button
+                              onClick={() => handleOpenReport(r.report_id)}
+                              className="inline-flex items-center gap-1 text-[10px] text-[#00355f] font-sans font-semibold mt-1 bg-[#e7f0f8] hover:bg-[#d5e7f6] px-1.5 py-0.5 rounded border border-[#00355f]/20 transition-colors"
+                              title="Click to view photographic proofs in dossier"
+                            >
                               <Paperclip size={10} />
-                              <span>{r.evidence_references.attachments.length} file{r.evidence_references.attachments.length > 1 ? 's' : ''}</span>
-                            </div>
+                              <span>{attCount} Proof{attCount > 1 ? 's' : ''} Attached</span>
+                            </button>
                           )}
                         </td>
                         <td className="p-3.5">
-                          <div className="font-bold text-[#191c1e]">{r.factory_name || r.factory_id}</div>
-                          <div className="text-[11px] text-[#727780] font-mono">
-                            Alert ID: {r.alert_id}
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#191c1e]">{r.factory_name || r.factory_id}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              region.toLowerCase().includes('mahad')
+                                ? 'bg-[#7c3aed]/10 text-[#7c3aed] border border-[#7c3aed]/20'
+                                : 'bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20'
+                            }`}>
+                              {region}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[#727780] font-mono mt-0.5 flex items-center gap-2">
+                            <span>Alert #{r.alert_id}</span>
+                            {r.case_id && <span>• {r.case_id}</span>}
                           </div>
                         </td>
-                        <td className="p-3.5 text-[#42474f]">
+                        <td className="p-3.5 text-[#42474f] font-mono text-[11px]">
                           {r.inspection_date}
                         </td>
                         <td className="p-3.5">
-                          <div className="font-medium text-[#191c1e]">{r.inspector_name || r.inspector_id}</div>
-                          <div className="text-[10px] text-[#727780]">Field Inspector</div>
+                          <div className="font-medium text-[#191c1e] text-[11px]">{r.inspector_name || r.inspector_id}</div>
+                          <div className="text-[10px] text-[#727780]">SPCB Enforcement Officer</div>
                         </td>
                         <td className="p-3.5">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold capitalize ${
-                            r.outcome === 'explained' ? 'bg-[#e8f5e9] text-[#1b6d24]' :
-                            r.outcome === 'inconclusive' ? 'bg-[#fff3e6] text-[#F57C00]' :
-                            r.outcome === 'unexplained' ? 'bg-[#fdecec] text-[#D32F2F]' :
-                            'bg-[#e7f0f8] text-[#00355f]'
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                            isFalsePositive
+                              ? 'bg-[#e8f5e9] text-[#1b6d24] border-[#1b6d24]/30'
+                              : isTampering
+                              ? 'bg-[#fdecec] text-[#D32F2F] border-[#D32F2F]/30'
+                              : 'bg-[#fff3e6] text-[#F57C00] border-[#F57C00]/30'
                           }`}>
-                            {r.outcome.replace('_', ' ')}
+                            {isFalsePositive && '✓ False Positive'}
+                            {isTampering && '⚠️ Tampering Confirmed'}
+                            {isInconclusive && '⏳ Lab Result Pending'}
                           </span>
                         </td>
                         <td className="p-3.5">
                           <span className={`badge-status ${
                             r.status === 'Reviewed' ? 'badge-status-reviewed' :
                             r.status === 'Submitted for Review' ? 'badge-status-submitted' :
-                            r.status === 'Further Information Required' ? 'badge-status-query' :
                             'badge-status-draft'
                           }`}>
                             {r.status}

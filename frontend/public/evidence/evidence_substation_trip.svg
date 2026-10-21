@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <filter id="doc_sh" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="3" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="#cbd5e1"/>
+
+  <!-- Official Paper Document -->
+  <rect x="80" y="30" width="640" height="540" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" filter="url(#doc_sh)"/>
+
+  <!-- MSEDCL Header -->
+  <rect x="100" y="45" width="600" height="55" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="120" y="68" font-family="Arial" font-size="14" fill="#00355f" font-weight="bold">MAHARASHTRA STATE ELECTRICITY DISTRIBUTION CO. LTD. (MSEDCL)</text>
+  <text x="120" y="85" font-family="Arial" font-size="10" fill="#475569">33/11 kV SUBSTATION LOGBOOK • MIDC TALOJA INDUSTRIAL ZONE</text>
+
+  <line x1="100" y1="110" x2="700" y2="110" stroke="#00355f" stroke-width="2"/>
+
+  <!-- Incident Details -->
+  <text x="110" y="135" font-family="monospace" font-size="11" fill="#0f172a" font-weight="bold">INCIDENT LOG #: TRIP-TALOJA-2026-8841-A</text>
+  <text x="110" y="155" font-family="monospace" font-size="10" fill="#334155">FEEDER NAME: 33kV CORROGARD / VINAYAK DEDICATED FEEDER</text>
+  <text x="110" y="175" font-family="monospace" font-size="10" fill="#334155">EVENT DATE:  2026-10-18 • SHIFT: FIRST SHIFT (06:00 - 14:00)</text>
+
+  <!-- Table of Trip Event -->
+  <rect x="110" y="195" width="580" height="150" fill="#f8fafc" stroke="#cbd5e1"/>
+  <line x1="110" y1="225" x2="690" y2="225" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="120" y="215" font-family="Arial" font-size="10" fill="#475569" font-weight="bold">TRIP TIME</text>
+  <text x="210" y="215" font-family="Arial" font-size="10" fill="#475569" font-weight="bold">RESTORED</text>
+  <text x="310" y="215" font-family="Arial" font-size="10" fill="#475569" font-weight="bold">DURATION</text>
+  <text x="410" y="215" font-family="Arial" font-size="10" fill="#475569" font-weight="bold">RELAY INDICATION &amp; CAUSE</text>
+
+  <text x="120" y="250" font-family="monospace" font-size="11" fill="#dc2626" font-weight="bold">09:12 IST</text>
+  <text x="210" y="250" font-family="monospace" font-size="11" fill="#16a34a" font-weight="bold">09:54 IST</text>
+  <text x="310" y="250" font-family="monospace" font-size="11" fill="#0f172a">42 Minutes</text>
+  <text x="410" y="250" font-family="monospace" font-size="10" fill="#0f172a">Lightning Surge • Earth Fault Relay (51N)</text>
+  
+  <text x="410" y="275" font-family="Arial" font-size="10" fill="#475569">Breaker #CB-33-04 tripped on transient surge.</text>
+  <text x="410" y="295" font-family="Arial" font-size="10" fill="#475569">Restored via standby transformer #TR-2.</text>
+  <text x="410" y="315" font-family="Arial" font-size="10" fill="#475569">Customer RTU/DAS experienced packet buffer hold.</text>
+
+  <!-- Big Red Stamp: CERTIFIED GENUINE -->
+  <circle cx="580" cy="450" r="60" fill="none" stroke="#dc2626" stroke-width="3" opacity="0.85"/>
+  <circle cx="580" cy="450" r="52" fill="none" stroke="#dc2626" stroke-width="1.5" opacity="0.85"/>
+  <text x="532" y="445" font-family="Arial" font-size="11" fill="#dc2626" font-weight="bold">MSEDCL TALOJA</text>
+  <text x="528" y="462" font-family="Arial" font-size="11" fill="#dc2626" font-weight="bold">OFFICIAL LOG</text>
+
+  <!-- Inspector Finding Box -->
+  <rect x="110" y="380" width="370" height="150" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="125" y="405" font-family="Arial" font-size="11" fill="#166534" font-weight="bold">TELEMETRY VERIFICATION CONCLUSION</text>
+  <text x="125" y="425" font-family="Arial" font-size="10" fill="#334155">• Outage matches RTU "Copy-Paste / Flatline" period</text>
+  <text x="125" y="443" font-family="Arial" font-size="10" fill="#334155">• Gateway replayed packet during brownout reconnect</text>
+  <text x="125" y="461" font-family="Arial" font-size="10" fill="#334155">• Internal RS485 data shows plant was offline safely</text>
+  <text x="125" y="485" font-family="Arial" font-size="11" fill="#15803d" font-weight="bold">VERDICT: FALSE POSITIVE (Grid Power Interruption)</text>
+</svg>

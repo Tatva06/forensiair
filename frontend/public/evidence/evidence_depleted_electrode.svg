@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <radialGradient id="glass_bulb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.9"/>
+      <stop offset="70%" stop-color="#38bdf8" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.9"/>
+    </radialGradient>
+    <filter id="dep_sh" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="3" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="#0f172a"/>
+
+  <!-- Macro View: Combination pH Electrode -->
+  <rect x="360" y="0" width="80" height="420" rx="8" fill="#334155" stroke="#64748b" stroke-width="2"/>
+  
+  <!-- Internal Reference Electrolyte Chamber (KCl gel dryout) -->
+  <rect x="375" y="60" width="50" height="320" fill="#1e293b"/>
+  <!-- Crystallized KCl Deposits (White Encrustation) -->
+  <path d="M 375 260 Q 400 240 425 270 L 425 380 L 375 380 Z" fill="#f8fafc" opacity="0.9"/>
+  <circle cx="390" cy="300" r="10" fill="#e2e8f0"/>
+  <circle cx="410" cy="320" r="12" fill="#cbd5e1"/>
+  <circle cx="385" cy="350" r="14" fill="#e2e8f0"/>
+  <circle cx="415" cy="360" r="8" fill="#f8fafc"/>
+
+  <!-- Glass Sensing Bulb at Bottom -->
+  <circle cx="400" cy="450" r="45" fill="url(#glass_bulb)" stroke="#94a3b8" stroke-width="3" filter="url(#dep_sh)"/>
+
+  <!-- Macro Pointer to Clogged Ceramic Diaphragm Junction -->
+  <polygon points="450,420 520,380 520,460" fill="#dc2626"/>
+  <rect x="520" y="370" width="250" height="150" rx="8" fill="#1e293b" stroke="#dc2626" stroke-width="2"/>
+  <rect x="520" y="370" width="250" height="26" rx="8" fill="#dc2626"/>
+  <text x="530" y="388" font-family="Arial" font-size="11" fill="#ffffff" font-weight="bold">CERAMIC JUNCTION CHOKED</text>
+  <text x="530" y="415" font-family="Arial" font-size="10" fill="#cbd5e1">• Reference KCl electrolyte dried out</text>
+  <text x="530" y="433" font-family="Arial" font-size="10" fill="#cbd5e1">• Summer ambient temp &gt;42°C caused gel dehydration</text>
+  <text x="530" y="451" font-family="Arial" font-size="10" fill="#cbd5e1">• Junction impedance &gt;50 kOhm (Normal: &lt;5 kOhm)</text>
+  <text x="530" y="469" font-family="Arial" font-size="10" fill="#f87171" font-weight="bold">• Caused gradual artificial upward drift</text>
+  <text x="530" y="495" font-family="Arial" font-size="11" fill="#34d399" font-weight="bold">VERDICT: SENSOR EXPIRY (FALSE POSITIVE)</text>
+
+  <!-- Left: Calibration Slope Comparison -->
+  <rect x="40" y="80" width="280" height="200" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+  <text x="55" y="105" font-family="Arial" font-size="12" fill="#38bdf8" font-weight="bold">ELECTRODE DIAGNOSTIC DATA</text>
+  <text x="55" y="130" font-family="monospace" font-size="10" fill="#94a3b8">Probe Age:      14 Months (Rated: 12)</text>
+  <text x="55" y="150" font-family="monospace" font-size="10" fill="#ef4444">Old Sensor Slope: 72.1% (FAIL)</text>
+  <text x="55" y="170" font-family="monospace" font-size="10" fill="#ef4444">Zero Offset:    +68 mV (LIMIT: ±30mV)</text>
+  <line x1="55" y1="185" x2="300" y2="185" stroke="#475569"/>
+  <text x="55" y="205" font-family="monospace" font-size="10" fill="#10b981">New Sensor Installed on Site:</text>
+  <text x="55" y="225" font-family="monospace" font-size="10" fill="#10b981">New Sensor Slope: 98.4% (PASS)</text>
+  <text x="55" y="245" font-family="monospace" font-size="10" fill="#10b981">Zero Offset:    +2.4 mV (PASS)</text>
+  <text x="55" y="265" font-family="monospace" font-size="10" fill="#38bdf8">Recalibrated with CPCB Buffers</text>
+
+  <!-- Camera HUD -->
+  <rect x="20" y="540" width="450" height="42" rx="6" fill="#000000" opacity="0.85"/>
+  <text x="35" y="558" font-family="monospace" font-size="11" fill="#f8fafc">MAHAD MIDC • M/s. Indo Amines Ltd.</text>
+  <text x="35" y="572" font-family="monospace" font-size="10" fill="#38bdf8">2026-10-17 12:20:11 IST • SENSOR AUDIT • HORIBA D-71</text>
+</svg>

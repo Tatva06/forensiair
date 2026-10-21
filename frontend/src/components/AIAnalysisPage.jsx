@@ -243,6 +243,7 @@ function CorrelationHeatmap({ parameters, pairs, selectedPair, onSelectPair }) {
 }
 
 export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId, currentUser }) {
+  const { isSimple } = useViewMode();
   const [factories, setFactories] = useState([]);
   const [selectedFactoryId, setSelectedFactoryId] = useState(initialFactoryId || '');
   const [selectedFactoryData, setSelectedFactoryData] = useState(null);
@@ -404,7 +405,6 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
 
   const isHighRisk = fObj.risk_tier === 'High' || fObj.risk_tier === 'High Risk';
   const isMediumRisk = fObj.risk_tier === 'Medium' || fObj.risk_tier === 'Moderate Risk';
-  const { isSimple } = useViewMode();
 
   const tamperProb = pred.tamper_probability !== undefined
     ? `${pred.tamper_probability.toFixed(1)}%`

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="amber_glass" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#451a03"/>
+      <stop offset="25%" stop-color="#78350f"/>
+      <stop offset="70%" stop-color="#92400e"/>
+      <stop offset="100%" stop-color="#451a03"/>
+    </linearGradient>
+    <filter id="coolbox_sh" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="3" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background Inspection Table -->
+  <rect width="800" height="600" fill="#1e293b"/>
+
+  <!-- Blue Ice Cooler Box -->
+  <rect x="100" y="160" width="600" height="380" rx="16" fill="#0284c7" stroke="#0369a1" stroke-width="4" filter="url(#coolbox_sh)"/>
+  <rect x="120" y="180" width="560" height="340" rx="8" fill="#e0f2fe"/>
+  <!-- Ice Packs in Cooler -->
+  <rect x="130" y="400" width="540" height="110" rx="6" fill="#bae6fd" opacity="0.8"/>
+
+  <!-- Three Amber 1000ml Laboratory Sample Bottles -->
+  <!-- Bottle 1: Central Lab -->
+  <rect x="170" y="220" width="100" height="240" rx="10" fill="url(#amber_glass)" stroke="#292524" stroke-width="2"/>
+  <rect x="200" y="190" width="40" height="35" rx="4" fill="#000000"/>
+  <rect x="180" y="270" width="80" height="90" fill="#ffffff" rx="3"/>
+  <text x="185" y="290" font-family="monospace" font-size="9" fill="#000" font-weight="bold">SAMPLE A</text>
+  <text x="185" y="305" font-family="monospace" font-size="8" fill="#444">BOD 5-DAY</text>
+  <text x="185" y="320" font-family="monospace" font-size="8" fill="#dc2626">SEALED #449-A</text>
+
+  <!-- Bottle 2: Factory Duplicate -->
+  <rect x="350" y="220" width="100" height="240" rx="10" fill="url(#amber_glass)" stroke="#292524" stroke-width="2"/>
+  <rect x="380" y="190" width="40" height="35" rx="4" fill="#000000"/>
+  <rect x="360" y="270" width="80" height="90" fill="#ffffff" rx="3"/>
+  <text x="365" y="290" font-family="monospace" font-size="9" fill="#000" font-weight="bold">SAMPLE B</text>
+  <text x="365" y="305" font-family="monospace" font-size="8" fill="#444">COD / TOC</text>
+  <text x="365" y="320" font-family="monospace" font-size="8" fill="#dc2626">SEALED #449-B</text>
+
+  <!-- Bottle 3: Referee / Court Sample -->
+  <rect x="530" y="220" width="100" height="240" rx="10" fill="url(#amber_glass)" stroke="#292524" stroke-width="2"/>
+  <rect x="560" y="190" width="40" height="35" rx="4" fill="#000000"/>
+  <rect x="540" y="270" width="80" height="90" fill="#ffffff" rx="3"/>
+  <text x="545" y="290" font-family="monospace" font-size="9" fill="#000" font-weight="bold">SAMPLE C</text>
+  <text x="545" y="305" font-family="monospace" font-size="8" fill="#444">REFEREE</text>
+  <text x="545" y="320" font-family="monospace" font-size="8" fill="#dc2626">SEALED #449-C</text>
+
+  <!-- Red Tamper-Proof Tape across Bottle Caps -->
+  <rect x="185" y="200" width="70" height="12" fill="#ef4444"/>
+  <rect x="365" y="200" width="70" height="12" fill="#ef4444"/>
+  <rect x="545" y="200" width="70" height="12" fill="#ef4444"/>
+
+  <!-- Chain of Custody Header Badge -->
+  <rect x="100" y="30" width="600" height="110" rx="8" fill="#0f172a" stroke="#f59e0b" stroke-width="2"/>
+  <rect x="100" y="30" width="600" height="26" rx="8" fill="#f59e0b"/>
+  <text x="115" y="48" font-family="Arial" font-size="12" fill="#000000" font-weight="bold">INCONCLUSIVE AUDIT • FORM-IV REGULATORY GRAB SAMPLES</text>
+  
+  <text x="115" y="75" font-family="Arial" font-size="11" fill="#f8fafc" font-weight="bold">FACILITY: Nouryon Chemicals India Private Limited (Mahad MIDC)</text>
+  <text x="115" y="93" font-family="Arial" font-size="10" fill="#94a3b8">• Triplicate samples collected under cold chain (4°C) for Central Environmental Laboratory</text>
+  <text x="115" y="111" font-family="Arial" font-size="10" fill="#94a3b8">• Parameters to be tested: 5-Day BOD (IS 3025 Pt 44), Heavy Metals (ICP-OES), Ammoniacal N</text>
+  <text x="115" y="130" font-family="Arial" font-size="11" fill="#fef08a" font-weight="bold">STATUS: INCONCLUSIVE — Compliance decision deferred pending lab report (ETA: 5 Days)</text>
+
+  <!-- Camera HUD -->
+  <rect x="100" y="555" width="460" height="35" rx="4" fill="#000000" opacity="0.85"/>
+  <text x="115" y="575" font-family="monospace" font-size="10" fill="#f8fafc">MAHAD MIDC • FINAL DISCHARGE WEIR • COC #NABL-MHD-449</text>
+</svg>

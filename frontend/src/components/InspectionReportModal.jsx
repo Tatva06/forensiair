@@ -15,7 +15,8 @@ import {
   File,
   Trash2,
   Download,
-  Printer
+  Printer,
+  Eye
 } from 'lucide-react';
 import { apiFetch } from '../config';
 import { exportReportToPrint } from '../utils/reportExport';
@@ -92,6 +93,7 @@ export function InspectionReportModal({
   const [adminNotes, setAdminNotes] = useState('');
   const [adminDecision, setAdminDecision] = useState('Reviewed');
   const [revisions, setRevisions] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
 
   // State for creating new reports without a pre-linked alert
   const [availableFactories, setAvailableFactories] = useState([]);
@@ -982,39 +984,56 @@ export function InspectionReportModal({
                         return (
                           <div
                             key={att.id}
-                            className="attachment-chip"
+                            className={`attachment-chip ${isImg ? 'cursor-pointer hover:border-[#00355f] hover:bg-[#f0f7ff]/50' : ''}`}
+                            onClick={() => isImg && setPreviewImage(att)}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               {isImg ? (
-                                <img
-                                  src={att.dataUrl}
-                                  alt={att.name}
-                                  className="w-10 h-10 object-cover rounded border border-[#E5E7EB] shrink-0"
-                                />
+                                <div className="relative group shrink-0">
+                                  <img
+                                    src={att.dataUrl}
+                                    alt={att.name}
+                                    className="w-11 h-11 object-cover rounded-lg border border-[#cbd5e1] group-hover:opacity-90 transition-opacity"
+                                  />
+                                  <div className="absolute inset-0 bg-[#00355f]/20 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Eye size={16} className="text-white drop-shadow" />
+                                  </div>
+                                </div>
                               ) : (
-                                <div className="w-10 h-10 rounded bg-[#f2f4f6] text-[#00355f] flex items-center justify-center shrink-0">
-                                  <File size={20} />
+                                <div className="w-11 h-11 rounded-lg bg-[#f2f4f6] text-[#00355f] flex items-center justify-center shrink-0">
+                                  <File size={22} />
                                 </div>
                               )}
                               <div className="min-w-0">
                                 <p className="font-bold text-xs text-[#191c1e] truncate" title={att.name}>
                                   {att.name}
                                 </p>
-                                <div className="flex items-center gap-2 text-[10px] text-[#727780]">
-                                  <span>{att.size}</span>
+                                <div className="flex items-center gap-2 text-[10px] text-[#727780] mt-0.5">
+                                  <span className="font-semibold text-[#00355f] bg-[#e7f0f8] px-1 rounded">{att.size}</span>
                                   <span>•</span>
                                   <span>{new Date(att.uploadedAt).toLocaleDateString()}</span>
+                                  {isImg && <span className="text-[#10b981] font-semibold">• Click to view photo</span>}
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+                              {isImg && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImage(att)}
+                                  title="View full-size photo"
+                                  className="p-1.5 text-[#00355f] hover:bg-[#e7f0f8] rounded transition-colors"
+                                >
+                                  <Eye size={14} />
+                                </button>
+                              )}
                               <a
                                 href={att.dataUrl}
                                 download={att.name}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title="Download / Open file"
+                                title="Download file"
                                 className="p-1.5 text-[#00355f] hover:bg-[#f2f4f6] rounded transition-colors"
                               >
                                 <Download size={14} />
@@ -1220,6 +1239,59 @@ export function InspectionReportModal({
           </div>
         )}
 
+        {/* Image Evidence Lightbox Viewer Modal */}
+        {previewImage && (
+          <div
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 sm:p-6"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div
+              className="bg-[#0f172a] border border-[#334155] rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-[#334155] flex items-center justify-between text-white bg-[#1e293b]">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#0284c7] text-white border border-[#38bdf8]/40 shadow-xs uppercase tracking-wider">
+                    📷 Evidentiary Proof
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs truncate text-[#f8fafc]">{previewImage.name}</p>
+                    <p className="text-[10px] text-[#94a3b8]">{previewImage.size} • Captured by SPCB Field Inspector</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={previewImage.dataUrl}
+                    download={previewImage.name}
+                    className="px-3 py-1.5 rounded-lg bg-[#00355f] text-white text-xs font-bold hover:bg-[#0f4c81] flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Download size={13} />
+                    <span>Download Original</span>
+                  </a>
+                  <button
+                    onClick={() => setPreviewImage(null)}
+                    className="p-1.5 rounded-lg text-[#94a3b8] hover:text-white hover:bg-[#334155] transition-colors"
+                    title="Close preview"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-6 flex-1 overflow-auto flex items-center justify-center bg-[#020617]/90 min-h-[350px]">
+                <img
+                  src={previewImage.dataUrl}
+                  alt={previewImage.name}
+                  className="max-h-[72vh] max-w-full object-contain rounded-xl shadow-2xl border border-[#334155]"
+                />
+              </div>
+
+              <div className="p-3 bg-[#0f172a] border-t border-[#334155] text-center text-[11px] text-[#94a3b8]">
+                <span>Official Forensic Telemetry Verification Evidence • Press ESC or click outside to dismiss</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
