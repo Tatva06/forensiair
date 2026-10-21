@@ -13,6 +13,7 @@ import { AlertsPage } from './components/AlertsPage';
 import { SettingsPage } from './components/SettingsPage';
 import { ShieldAlert } from 'lucide-react';
 import { apiFetch, getAuthToken, clearAuthToken, UNAUTHORIZED_EVENT } from './config';
+import { ViewModeProvider } from './context/ViewModeContext';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -141,12 +142,14 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb]">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole} currentUser={currentUser} />
-      <TopHeader currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} />
-      <main className="ml-16 md:ml-[280px] pt-16 min-h-screen bg-[#f8f9fb] text-[#191c1e]">
-        {renderActiveModule()}
-      </main>
-    </div>
+    <ViewModeProvider currentUser={currentUser}>
+      <div className="min-h-screen bg-[#f8f9fb]">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole} currentUser={currentUser} />
+        <TopHeader currentUser={currentUser} onLogout={handleLogout} onNavigate={handleNavigate} />
+        <main className="ml-16 md:ml-[280px] pt-16 min-h-screen bg-[#f8f9fb] text-[#191c1e]">
+          {renderActiveModule()}
+        </main>
+      </div>
+    </ViewModeProvider>
   );
 }

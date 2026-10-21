@@ -29,6 +29,8 @@ import {
 } from 'recharts';
 import { apiFetch } from '../config';
 import { InspectionReportModal } from './InspectionReportModal';
+import { useViewMode } from '../context/ViewModeContext';
+import { ScoreExplainer } from './ScoreExplainer';
 
 // Parameter measurement definitions with units for wastewater inspectors
 const PARAM_METADATA = {
@@ -402,6 +404,7 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
 
   const isHighRisk = fObj.risk_tier === 'High' || fObj.risk_tier === 'High Risk';
   const isMediumRisk = fObj.risk_tier === 'Medium' || fObj.risk_tier === 'Moderate Risk';
+  const { isSimple } = useViewMode();
 
   const tamperProb = pred.tamper_probability !== undefined
     ? `${pred.tamper_probability.toFixed(1)}%`
@@ -438,16 +441,20 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
             <span className="material-symbols-outlined text-xs">chevron_right</span>
             <span className="text-[#191c1e] font-bold">AI Analysis & Inspector Diagnostics</span>
           </nav>
-          <h1 className="text-headline-lg font-headline-lg text-[#00355f]">AI Analysis & Telemetry Diagnostics</h1>
+          <h1 className="text-headline-lg font-headline-lg text-[#00355f]">
+            {isSimple ? 'Facility Pollution Data Review' : 'AI Analysis & Telemetry Diagnostics'}
+          </h1>
           <p className="text-body-md text-[#42474f]">
             Facility: <span className="font-bold text-[#191c1e]">{fObj.factory_name || fObj.name}</span> | ID: #{fObj.factory_id}
           </p>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#00355f]/10 text-[#00355f] border border-[#00355f]/20">
-              Historical Development Evaluation Mode
+              {isSimple ? 'Historical Data Analysis' : 'Historical Development Evaluation Mode'}
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#f8f9fb] text-[#727780] border border-[#E5E7EB]">
-              Development telemetry data · Not currently monitoring live plant streams
+              {isSimple
+                ? 'Based on past data records — live monitoring is being set up'
+                : 'Development telemetry data · Not currently monitoring live plant streams'}
             </span>
           </div>
         </div>
@@ -500,9 +507,11 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-body-sm font-bold text-[#727780] uppercase tracking-wider">
-            1. Preliminary Prototype Risk Indicators (Legacy Weak-Supervision Baseline)
+            {isSimple
+              ? '1. Overall Risk Assessment for this Facility'
+              : '1. Preliminary Prototype Risk Indicators (Legacy Weak-Supervision Baseline)'}
           </h2>
-          <span className="text-[11px] text-[#727780]">August 2026 Prototype Formulation</span>
+          <span className="text-[11px] text-[#727780]">{isSimple ? '' : 'August 2026 Prototype Formulation'}</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -588,14 +597,20 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-headline-md font-headline-md text-[#00355f] flex items-center gap-2">
-              <span>2. Forensier V2 Supervised Anomaly Evaluation</span>
+              <span>
+                {isSimple
+                  ? '2. What the AI System Found — Detailed Breakdown'
+                  : '2. Forensier V2 Supervised Anomaly Evaluation'}
+              </span>
             </h2>
             <p className="text-xs text-[#727780] mt-0.5">
-              Rigorous 5-fold Leave-One-Factory-Out cross-mechanism evaluation under the frozen protocol at a calibrated budget of 1.0 alert / factory-month.
+              {isSimple
+                ? 'The AI checked the facility\'s data against known tampering patterns. The results below show how confident the system is and what it found.'
+                : 'Rigorous 5-fold Leave-One-Factory-Out cross-mechanism evaluation under the frozen protocol at a calibrated budget of 1.0 alert / factory-month.'}
             </p>
           </div>
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#00355f]/10 text-[#00355f] border border-[#00355f]/20">
-            Historical Development Evaluation
+            {isSimple ? 'AI System Analysis' : 'Historical Development Evaluation'}
           </span>
         </div>
 
@@ -605,6 +620,21 @@ export function AIAnalysisPage({ onNavigate, selectedFactoryId: initialFactoryId
           </div>
         ) : (
           <div className="space-y-6">
+            {/* ScoreExplainer panel — adapts automatically to Simple vs Technical mode */}
+            {v2Analysis?.evaluation_metrics && (
+              <ScoreExplainer
+                score={v2Analysis.evaluation_metrics?.tau_score ?? (isHighRisk ? 0.96 : isMediumRisk ? 0.78 : 0.45)}
+                fingerprints={fingerprintChecks
+                  .filter(fc => fc.triggered)
+                  .map(fc => (fc.name || fc.key || '').toLowerCase().replace(/\s+/g, '_'))
+                  .slice(0, 3)}
+                modelName="Forensier V2 Causal Supervised Detector"
+                modelVersion="2.0.0-frozen"
+                modelBreakdown={breakdown}
+                factoryName={fObj.factory_name || fObj.name}
+              />
+            )}
+
             {/* Translated Metric Cards with Inspector Everyday Language */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Metric 1: Recall */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { apiFetch } from '../config';
+import { ModeToggle } from './ModeToggle';
 
 // QC FIX (2026-08): search had no onChange/submit handler at all (typing
 // did nothing) and the notification bell had no onClick and rendered its
@@ -134,6 +135,10 @@ export function TopHeader({ currentUser, onLogout, onNavigate }) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-6 ml-auto">
+        {/* Plain ⇄ Technical toggle — visible on md+ */}
+        <div className="hidden md:flex">
+          <ModeToggle />
+        </div>
         <div className="hidden md:flex items-center gap-4 border-r border-[#E5E7EB] pr-6">
           <button
             onClick={() => onNavigate('alerts')}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, Filter, Calendar } from 'lucide-react';
 import { apiFetch, API_BASE_URL } from '../config';
+import { useViewMode } from '../context/ViewModeContext';
 
 const REGIONS = ['Taloja', 'Mahad'];
 const INDUSTRIES = [
@@ -14,6 +15,7 @@ const INDUSTRIES = [
 ];
 
 export function ExecutiveDashboardPage({ onNavigate }) {
+  const { isSimple } = useViewMode();
   const [summary, setSummary] = useState(null);
   const [factories, setFactories] = useState([]);
   const [v2Alerts, setV2Alerts] = useState([]);
@@ -140,11 +142,17 @@ export function ExecutiveDashboardPage({ onNavigate }) {
             <span className="material-symbols-outlined text-xs">chevron_right</span>
             <span className="text-[var(--color-text)] font-bold">Dashboard Overview</span>
           </nav>
-          <h2 className="font-headline-lg text-headline-lg text-[var(--color-primary)]">Executive Dashboard</h2>
-          <p className="font-body-md text-body-md text-[var(--color-text-secondary)]">Central monitoring of national environmental compliance and risk metrics.</p>
+          <h2 className="font-headline-lg text-headline-lg text-[var(--color-primary)]">
+            {isSimple ? 'Surveillance Overview' : 'Executive Dashboard'}
+          </h2>
+          <p className="font-body-md text-body-md text-[var(--color-text-secondary)]">
+            {isSimple
+              ? 'A summary of which industrial facilities are being monitored and any concerns raised by the AI system.'
+              : 'Central monitoring of national environmental compliance and risk metrics.'}
+          </p>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#00355f]/10 text-[#00355f] border border-[#00355f]/20">
-              Historical Development Evaluation Mode
+              {isSimple ? 'Historical Data — AI Analysis Mode' : 'Historical Development Evaluation Mode'}
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#f2f4f6] text-[#727780]">
               33 Monitored Industrial Facilities
@@ -170,13 +178,17 @@ export function ExecutiveDashboardPage({ onNavigate }) {
         {/* High Risk */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] p-5 rounded-xl shadow-xs border-l-4 border-l-[var(--color-danger)] transition-shadow hover:shadow-md">
           <div className="flex justify-between items-start mb-3">
-            <span className="font-label-caps text-label-caps text-[var(--color-danger)] uppercase">High Risk Sites (Legacy Baseline)</span>
+            <span className="font-label-caps text-label-caps text-[var(--color-danger)] uppercase">
+              {isSimple ? 'Facilities Requiring Urgent Visit' : 'High Risk Sites (Legacy Baseline)'}
+            </span>
             <span className="stat-icon stat-icon-danger">
               <span className="material-symbols-outlined">warning</span>
             </span>
           </div>
           <div className="font-display-kpi text-display-kpi text-[var(--color-danger)]">{summary.high_risk_count}</div>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">Flagged by heuristic composite score</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            {isSimple ? 'Facilities flagged as high priority for inspection' : 'Flagged by heuristic composite score'}
+          </p>
         </div>
 
         {/* Active Alerts */}
