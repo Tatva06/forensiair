@@ -2,10 +2,14 @@ import sqlite3
 import json
 import os
 import urllib.parse
+from reports_service import init_reports_tables
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "forensier.db")
 if not os.path.exists(DB_PATH):
     DB_PATH = "forensier.db"
+
+# Ensure table schema and safe column migrations run
+init_reports_tables()
 
 svg_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "evidence")
 svg_cache = {}
@@ -48,7 +52,14 @@ reports_data = [
         "inspector_id": "INSP-TAL-01",
         "inspector_name": "Er. Rajesh Deshmukh (Sr. Environmental Engineer)",
         "inspection_date": "2026-10-19",
-        "checks_performed": json.dumps(["sensor_condition_and_calibration", "original_readings", "operational_records", "maintenance_logs", "other"]),
+        "checks_performed": json.dumps([
+            "sensor_condition_and_calibration",
+            "original_readings",
+            "operational_records",
+            "maintenance_logs",
+            "pipe_tracing_bypass",
+            "other"
+        ]),
         "other_checks_description": "Concealed plumbing tracer test, CCTV surveillance footage review, and terminal box seal inspection.",
         "findings": """Unannounced midnight physical inspection conducted at 01:15 AM following automated Critical Alert #8 (5 tampering fingerprints triggered).
 
@@ -62,6 +73,19 @@ Comparative chemical analysis:
 
 Plant Environmental Manager admitted under interrogation that dilution hose was operated during night hours (22:00 to 05:00) to mask organic load surges during antibiotic synthesis batch discharges.""",
         "outcome": "referred",
+        "ai_confirmation": "confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.94,
+            "severity": "CRITICAL",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["flatline", "impossible_values", "limit_hugging", "correlation_break"],
+            "time_window": "2026-10-18 22:30 to 2026-10-19 04:30 IST",
+            "xgb_output": 0.91,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected unnatural steady readings on COD and TSS during night shifts, indicating possible sensor bypass or freshwater dilution.",
+            "technical_summary": "T1 Flatline (variance < 0.05) & T3 Limit Hugging on COD. Isolation Forest anomaly score = 0.94. XGBoost Model output (not a calibrated probability) = 0.91.",
+            "shap_top_features": ["cod_variance_ratio (-0.42)", "tss_baseline_divergence (+0.38)", "night_flow_discrepancy (+0.31)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Telemetry deviation confirmed as physical tampering / sensor bypass conduit",
             "doc_reference": "LAB-MAH-TAL-2026-8812 (NABL Accredited Analytical Report)",
@@ -94,7 +118,12 @@ Plant Environmental Manager admitted under interrogation that dilution hose was 
         "inspector_id": "INSP-TAL-04",
         "inspector_name": "Vikram Kadam (Junior Environmental Officer)",
         "inspection_date": "2026-10-18",
-        "checks_performed": json.dumps(["sensor_condition_and_calibration", "original_readings", "operational_records", "maintenance_logs"]),
+        "checks_performed": json.dumps([
+            "sensor_condition_and_calibration",
+            "original_readings",
+            "operational_records",
+            "maintenance_logs"
+        ]),
         "other_checks_description": "Ultrasonic probe solvent bath cleaning and 3-point CPCB buffer recalibration.",
         "findings": """Inspected the ETP Aeration Basin following AI flatline alert on Optical Dissolved Oxygen (DO) and pH parameters.
 
@@ -110,6 +139,19 @@ In presence of the inspecting team:
 
 Factory wastewater treatment process, batch dyeing records, and electrical power meter logs confirmed standard compliant operations. No evidence of intentional manipulation or regulatory breach.""",
         "outcome": "explained",
+        "ai_confirmation": "not_confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.78,
+            "severity": "HIGH",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["flatline", "sensor_dip"],
+            "time_window": "2026-10-18 04:00 to 2026-10-18 10:00 IST",
+            "xgb_output": 0.74,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected frozen flat readings on DO sensor. Signal stayed exactly constant for 6 hours.",
+            "technical_summary": "T1 Flatline trigger on parameter DO (zero variance across 24 consecutive readings). Isolation Forest anomaly score = 0.78.",
+            "shap_top_features": ["do_rolling_std (-0.51)", "autocorrelation_lag1 (+0.32)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Sensor probe recalibration and zero-drift wash verified in plant maintenance log",
             "doc_reference": "NABL Calibration Validation Certificate #CAL-2026-8819",
@@ -122,7 +164,7 @@ Factory wastewater treatment process, batch dyeing records, and electrical power
             ]
         }),
         "status": "Reviewed",
-        "admin_notes": "Explanation accepted and verified against plant pre-alert maintenance logbook. Case closed as equipment fault / confirmed FALSE POSITIVE. Facility directed to increase wiper inspection frequency from bi-weekly to weekly during summer season.",
+        "admin_notes": "Explanation accepted and verified against plant pre-alert maintenance logbook. Case closed as equipment fault / confirmed normal operational explanation. Facility directed to increase wiper inspection frequency from bi-weekly to weekly during summer season.",
         "admin_decision": "Reviewed",
         "reviewed_by": "Dr. Ananya Sharma (Regional Officer, SPCB Navi Mumbai & Taloja)",
         "reviewed_at": "2026-10-18T16:00:00.000Z",
@@ -141,7 +183,11 @@ Factory wastewater treatment process, batch dyeing records, and electrical power
         "inspector_id": "INSP-MHD-02",
         "inspector_name": "Sunil More (Scientific Officer, SPCB Mahad)",
         "inspection_date": "2026-10-16",
-        "checks_performed": json.dumps(["operational_records", "maintenance_logs", "missing_readings_or_transmission"]),
+        "checks_performed": json.dumps([
+            "operational_records",
+            "maintenance_logs",
+            "missing_readings_or_transmission"
+        ]),
         "other_checks_description": "Lockout/Tagout (LOTO) physical safety padlock audit and CEMS zero-gas purge diagnostic.",
         "findings": """Physical verification conducted in response to Coordinated Missing Data and Correlation Break flag on CEMS flue gas telemetry (SO2, NOx, and Particulate Matter dropped to zero variance).
 
@@ -154,6 +200,19 @@ Crucial verification findings:
 
 No fuel burning occurred during the entire episode. Zero industrial emissions were released.""",
         "outcome": "explained",
+        "ai_confirmation": "not_confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.81,
+            "severity": "HIGH",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["coordinated_missing", "correlation_break"],
+            "time_window": "2026-10-15 08:00 to 2026-10-16 12:00 IST",
+            "xgb_output": 0.77,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected missing data and broken relationship between SO2 and NOx emissions.",
+            "technical_summary": "Correlation break across SO2 and NOx (r dropped from 0.88 to 0.02) during CEMS automated zero-gas purge cycle.",
+            "shap_top_features": ["so2_nox_cross_correlation (-0.46)", "stack_flow_baseline (-0.35)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Process batch production paused / ETP plant shut down during telemetry episode",
             "doc_reference": "MPCB Mahad Prior Shutdown Notice Inward #RO-MHD-774 (Dated 06-Oct-2026)",
@@ -165,7 +224,7 @@ No fuel burning occurred during the entire episode. Zero industrial emissions we
             ]
         }),
         "status": "Reviewed",
-        "admin_notes": "Approved. Legitimacy of plant shutdown confirmed through verified inward records. Anomaly classified as confirmed FALSE POSITIVE resulting from automated zero-air calibration purge during shutdown.",
+        "admin_notes": "Approved. Legitimacy of plant shutdown confirmed through verified inward records. Anomaly classified as confirmed normal operational explanation resulting from automated zero-air calibration purge during shutdown.",
         "admin_decision": "Reviewed",
         "reviewed_by": "P. K. Patil (Regional Officer, SPCB Raigad & Mahad)",
         "reviewed_at": "2026-10-16T17:00:00.000Z",
@@ -184,7 +243,13 @@ No fuel burning occurred during the entire episode. Zero industrial emissions we
         "inspector_id": "INSP-MHD-01",
         "inspector_name": "D. R. Pawar (Sr. Environmental Engineer, SPCB Mahad Enforcement)",
         "inspection_date": "2026-10-17",
-        "checks_performed": json.dumps(["original_readings", "operational_records", "sensor_condition_and_calibration", "other"]),
+        "checks_performed": json.dumps([
+            "original_readings",
+            "operational_records",
+            "sensor_condition_and_calibration",
+            "scada_edge_audit",
+            "other"
+        ]),
         "other_checks_description": "Forensic audit of SCADA/PLC workstation, Modbus register memory dump, and Wireshark packet capture.",
         "findings": """Investigated persistent Limit Hugging alert where COD readings remained frozen between 244.0 and 248.5 mg/L (immediately below the statutory threshold of 250.0 mg/L) without a single variation outside this 2% band for 18 consecutive days.
 
@@ -198,6 +263,19 @@ Forensic discoveries:
 
 The plant automation technician admitted that this override logic was implemented to prevent automatic SMS show-cause alerts from being generated by the SPCB portal during high-strength batch pigment washings.""",
         "outcome": "referred",
+        "ai_confirmation": "confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.96,
+            "severity": "CRITICAL",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["limit_hugging", "copy_paste"],
+            "time_window": "2026-09-30 to 2026-10-17 Continuous",
+            "xgb_output": 0.93,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected that pollution readings stayed artificially stuck right below the legal ceiling (248 out of 250 mg/L) without natural variance.",
+            "technical_summary": "T3 Limit Hugging trigger (98.4% of CTO limit for >400 continuous time-steps). Isolation Forest anomaly score = 0.96.",
+            "shap_top_features": ["boundary_proximity_score (+0.54)", "upper_bound_skew (+0.41)", "entropy_score (-0.38)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Telemetry deviation confirmed as physical tampering / sensor bypass conduit",
             "doc_reference": "Forensic Cyber-Audit & Modbus Memory Extraction Report #CYBER-MHD-2026-09",
@@ -229,7 +307,11 @@ The plant automation technician admitted that this override logic was implemente
         "inspector_id": "INSP-TAL-04",
         "inspector_name": "Vikram Kadam (Junior Environmental Officer)",
         "inspection_date": "2026-10-18",
-        "checks_performed": json.dumps(["original_readings", "missing_readings_or_transmission", "maintenance_logs"]),
+        "checks_performed": json.dumps([
+            "original_readings",
+            "missing_readings_or_transmission",
+            "maintenance_logs"
+        ]),
         "other_checks_description": "Cross-verification with MSEDCL 33kV Substation logbook and RTU diagnostic buffer review.",
         "findings": """Investigated AI flag for Copy-Paste Pattern & Flatline on effluent telemetry occurring between 09:12 and 09:54 IST on 18-Oct-2026.
 
@@ -241,6 +323,19 @@ Field investigation cross-checked with the Maharashtra State Electricity Distrib
 
 No plant effluent was discharged during the power outage as raw wastewater transfer pumps were interlocked to de-energize on mains loss.""",
         "outcome": "explained",
+        "ai_confirmation": "not_confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.72,
+            "severity": "HIGH",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["copy_paste", "flatline"],
+            "time_window": "2026-10-18 09:12 to 2026-10-18 09:54 IST",
+            "xgb_output": 0.69,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected exact duplicated blocks of numbers appearing repeatedly in the data feed.",
+            "technical_summary": "T2 Copy-Paste trigger (exact floating-point duplicate payload across 3 sequential frames). Isolation Forest anomaly score = 0.72.",
+            "shap_top_features": ["exact_match_run_length (+0.48)", "payload_hash_collision (+0.36)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Flow meter pulse rate transmission buffer replay",
             "doc_reference": "MSEDCL Official Substation Incident Log #TRIP-TALOJA-2026-8841-A",
@@ -252,7 +347,7 @@ No plant effluent was discharged during the power outage as raw wastewater trans
             ]
         }),
         "status": "Reviewed",
-        "admin_notes": "Verified and approved. Anomaly confirmed as telemetry gateway transmission buffer replay caused by grid power trip. Classified as confirmed FALSE POSITIVE. Facility directed to upgrade RTU firmware to prevent repetitive retransmissions during network reconnections.",
+        "admin_notes": "Verified and approved. Anomaly confirmed as telemetry gateway transmission buffer replay caused by grid power trip. Classified as confirmed normal operational explanation. Facility directed to upgrade RTU firmware to prevent repetitive retransmissions during network reconnections.",
         "admin_decision": "Reviewed",
         "reviewed_by": "Dr. Ananya Sharma (Regional Officer, SPCB Navi Mumbai & Taloja)",
         "reviewed_at": "2026-10-18T18:15:00.000Z",
@@ -271,7 +366,12 @@ No plant effluent was discharged during the power outage as raw wastewater trans
         "inspector_id": "INSP-MHD-03",
         "inspector_name": "Er. Suresh Shinde (Assistant Environmental Engineer)",
         "inspection_date": "2026-10-19",
-        "checks_performed": json.dumps(["sensor_condition_and_calibration", "original_readings", "operational_records", "other"]),
+        "checks_performed": json.dumps([
+            "sensor_condition_and_calibration",
+            "original_readings",
+            "operational_records",
+            "other"
+        ]),
         "other_checks_description": "Triplicate grab sampling under cold-chain chain of custody and chemical solvent odor profiling.",
         "findings": """Conducted surprise regulatory inspection following Inspection Dip flag on effluent discharge telemetry.
 
@@ -290,6 +390,19 @@ Samples were labeled (#NABL-MHD-449-A, B, C), secured with tamper-evident barcod
 
 Final enforcement determination deferred pending receipt of accredited analytical certificate (expected within 5 working days).""",
         "outcome": "inconclusive",
+        "ai_confirmation": "partly_confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.85,
+            "severity": "CRITICAL",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["inspection_dip", "correlation_break"],
+            "time_window": "2026-10-19 09:00 to 14:00 IST",
+            "xgb_output": 0.82,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected an artificial temporary drop in recorded values right around scheduled inspection hours.",
+            "technical_summary": "Pre-inspection cleanup / dip signal (-45% sudden variance reduction coincident with daylight audit window).",
+            "shap_top_features": ["daylight_inspection_proximity (+0.44)", "abrupt_slope_change (-0.39)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Inconclusive evidence: awaiting 5-day BOD laboratory results",
             "doc_reference": "Form-IV Sample Collection Memorandum & Lab Dispatch Receipt #NABL-MHD-449",
@@ -320,7 +433,11 @@ Final enforcement determination deferred pending receipt of accredited analytica
         "inspector_id": "INSP-MHD-02",
         "inspector_name": "Sunil More (Scientific Officer, SPCB Mahad)",
         "inspection_date": "2026-10-17",
-        "checks_performed": json.dumps(["sensor_condition_and_calibration", "original_readings", "maintenance_logs"]),
+        "checks_performed": json.dumps([
+            "sensor_condition_and_calibration",
+            "original_readings",
+            "maintenance_logs"
+        ]),
         "other_checks_description": "Electrode diagnostic impedance check, KCl reference electrolyte inspection, and multi-buffer recalibration.",
         "findings": """Investigated Gradual Drift alert on effluent pH sensor (+0.08 pH drift per day over 12 days, rising from 7.2 to 8.4 despite stable acid neutralization dosing).
 
@@ -338,6 +455,19 @@ Corrective actions carried out under inspector supervision:
 
 No environmental breach or bypass was observed.""",
         "outcome": "explained",
+        "ai_confirmation": "not_confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.74,
+            "severity": "HIGH",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["gradual_drift"],
+            "time_window": "2026-10-05 to 2026-10-17 Continuous",
+            "xgb_output": 0.71,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected slow upward drift on pH readings that crept steadily higher over 12 days.",
+            "technical_summary": "T7 Gradual Drift trigger (+0.08 pH monotonic trend with linear coefficient r² = 0.94). Isolation Forest score = 0.74.",
+            "shap_top_features": ["monotonic_trend_slope (+0.47)", "neutralization_reagent_decoupling (+0.34)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Sensor probe recalibration and zero-drift wash verified in plant maintenance log",
             "doc_reference": "NABL Calibration Certificate & Manufacturer Warranty Slip #HOR-CAL-2026",
@@ -350,7 +480,7 @@ No environmental breach or bypass was observed.""",
             ]
         }),
         "status": "Reviewed",
-        "admin_notes": "Approved as verified FALSE POSITIVE. Sensor had reached operational end-of-life. Timely replacement and calibration documented under regulatory supervision. Facility instructed to install solar heat shield over the sensor mounting kiosk.",
+        "admin_notes": "Approved as verified normal operational explanation. Sensor had reached operational end-of-life. Timely replacement and calibration documented under regulatory supervision. Facility instructed to install solar heat shield over the sensor mounting kiosk.",
         "admin_decision": "Reviewed",
         "reviewed_by": "P. K. Patil (Regional Officer, SPCB Raigad & Mahad)",
         "reviewed_at": "2026-10-17T16:30:00.000Z",
@@ -369,7 +499,13 @@ No environmental breach or bypass was observed.""",
         "inspector_id": "INSP-TAL-01",
         "inspector_name": "Er. Rajesh Deshmukh (Sr. Environmental Engineer)",
         "inspection_date": "2026-10-19",
-        "checks_performed": json.dumps(["sensor_condition_and_calibration", "original_readings", "operational_records", "other"]),
+        "checks_performed": json.dumps([
+            "sensor_condition_and_calibration",
+            "original_readings",
+            "operational_records",
+            "pipe_tracing_bypass",
+            "other"
+        ]),
         "other_checks_description": "Tracing underground industrial plumbing and fire hydrant network pressure telemetry.",
         "findings": """Investigated suspicious telemetry pattern showing sudden drops in electrical conductivity accompanied by unnatural flatline periods in COD telemetry during late evening hours.
 
@@ -379,6 +515,19 @@ During peak chemical synthesis shifts, the valve was actuated to introduce high-
 
 Inspectors immediately sealed the bypass valve with a tamper-evident regulatory seal, seized the valve actuator air supply tubing, and took grab samples before and after the dilution point.""",
         "outcome": "referred",
+        "ai_confirmation": "confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.89,
+            "severity": "HIGH",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["copy_paste", "impossible_values"],
+            "time_window": "2026-10-18 20:00 to 2026-10-19 02:00 IST",
+            "xgb_output": 0.86,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "AI detected impossible sharp drops in conductivity that coincided with flattened COD numbers during evening shifts.",
+            "technical_summary": "T4 Impossible Sensor Value trigger (conductivity dropped 80% while flow surged 300%). Isolation Forest score = 0.89.",
+            "shap_top_features": ["conductivity_hydraulic_inversion (+0.52)", "night_dilution_index (+0.41)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Telemetry deviation confirmed as physical tampering / sensor bypass conduit",
             "doc_reference": "Enforcement Seizure Memo #SEIZ-TAL-2026-008 & Panchanama",
@@ -410,7 +559,12 @@ Inspectors immediately sealed the bypass valve with a tamper-evident regulatory 
         "inspector_id": "INSP-TAL-01",
         "inspector_name": "Er. Rajesh Deshmukh (Sr. Environmental Engineer)",
         "inspection_date": "2026-10-20",
-        "checks_performed": json.dumps(["sensor_condition_and_calibration", "original_readings", "operational_records", "maintenance_logs"]),
+        "checks_performed": json.dumps([
+            "sensor_condition_and_calibration",
+            "original_readings",
+            "operational_records",
+            "maintenance_logs"
+        ]),
         "other_checks_description": "Comprehensive annual regulatory surveillance audit and ZLD system verification.",
         "findings": """Unannounced regulatory surveillance audit conducted at Dow Chemical International (Taloja). 
 
@@ -422,6 +576,19 @@ All environmental pollution abatement facilities inspected in operation:
 
 Comprehensive compliance verified. No deviation or irregularities found.""",
         "outcome": "explained",
+        "ai_confirmation": "not_confirmed",
+        "ai_prediction_snapshot": {
+            "score": 0.65,
+            "severity": "ROUTINE",
+            "model_version": "v2.4.1-ensemble",
+            "triggered_fingerprints": ["data_integrity"],
+            "time_window": "2026-10-20 06:00 to 12:00 IST",
+            "xgb_output": 0.58,
+            "xgb_label": "Model output (not a calibrated probability)",
+            "plain_summary": "Routine automated audit pass. Minor network packet jitter observed during routine server sync.",
+            "technical_summary": "Transient transmission jitter on parameter pH (<2 sampling cycles). Telemetry integrity index 99.8%.",
+            "shap_top_features": ["packet_latency_jitter (+0.28)", "normal_flow_continuity (-0.45)"]
+        },
         "evidence_references": json.dumps({
             "supporting_reason": "Grab sample analysis conforms to effluent discharge CTO limits",
             "doc_reference": "NABL Calibration Certificate #NABL-CAL-2026-9041",
@@ -445,20 +612,23 @@ Comprehensive compliance verified. No deviation or irregularities found.""",
 ]
 
 for r in reports_data:
+    pred_json = json.dumps(r["ai_prediction_snapshot"]) if r.get("ai_prediction_snapshot") else None
     c.execute("""
         INSERT INTO inspection_reports (
             report_id, alert_id, factory_id, factory_name, case_id,
             inspector_id, inspector_name, inspection_date, checks_performed,
             other_checks_description, findings, outcome, evidence_references,
             status, admin_notes, admin_decision, reviewed_by, reviewed_at,
-            created_at, updated_at, submitted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, submitted_at,
+            ai_confirmation, ai_prediction_snapshot
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         r["report_id"], r["alert_id"], r["factory_id"], r["factory_name"], r["case_id"],
         r["inspector_id"], r["inspector_name"], r["inspection_date"], r["checks_performed"],
         r["other_checks_description"], r["findings"], r["outcome"], r["evidence_references"],
         r["status"], r["admin_notes"], r["admin_decision"], r["reviewed_by"], r["reviewed_at"],
-        r["created_at"], r["updated_at"], r["submitted_at"]
+        r["created_at"], r["updated_at"], r["submitted_at"],
+        r["ai_confirmation"], pred_json
     ))
 
     # Add Initial Revision

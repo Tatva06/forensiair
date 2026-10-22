@@ -987,6 +987,8 @@ class ReportCreateRequest(BaseModel):
     evidence_references: Optional[Dict[str, Any]] = None
     case_id: Optional[str] = None
     submit_immediately: Optional[bool] = False
+    ai_confirmation: Optional[str] = None
+    ai_prediction_snapshot: Optional[Dict[str, Any]] = None
 
 class ReportUpdateRequest(BaseModel):
     inspection_date: Optional[str] = None
@@ -996,6 +998,8 @@ class ReportUpdateRequest(BaseModel):
     other_checks_description: Optional[str] = None
     evidence_references: Optional[Dict[str, Any]] = None
     case_id: Optional[str] = None
+    ai_confirmation: Optional[str] = None
+    ai_prediction_snapshot: Optional[Dict[str, Any]] = None
 
 class ReportReviewRequest(BaseModel):
     decision: str  # 'Reviewed' or 'Further Information Required'
@@ -1060,7 +1064,9 @@ def create_inspection_report(
             other_checks_description=req.other_checks_description,
             evidence_references=req.evidence_references,
             case_id=req.case_id,
-            status="Submitted for Review" if req.submit_immediately else "Draft"
+            status="Submitted for Review" if req.submit_immediately else "Draft",
+            ai_confirmation=req.ai_confirmation,
+            ai_prediction_snapshot=req.ai_prediction_snapshot
         )
         return report
     except ValueError as e:
@@ -1087,7 +1093,9 @@ def update_inspection_report(
             other_checks_description=req.other_checks_description,
             evidence_references=req.evidence_references,
             case_id=req.case_id,
-            actor_id=actor_id
+            actor_id=actor_id,
+            ai_confirmation=req.ai_confirmation,
+            ai_prediction_snapshot=req.ai_prediction_snapshot
         )
         return report
     except KeyError as e:

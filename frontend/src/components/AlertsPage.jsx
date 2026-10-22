@@ -15,6 +15,7 @@ import { InspectionReportModal } from './InspectionReportModal';
 import { exportReportToPrint } from '../utils/reportExport';
 import { useViewMode } from '../context/ViewModeContext';
 import { ScoreExplainer } from './ScoreExplainer';
+import { getReportStatusLabel } from '../utils/glossary';
 
 export function AlertsPage({ onNavigate, currentUser }) {
   const { isSimple } = useViewMode();
@@ -161,50 +162,29 @@ export function AlertsPage({ onNavigate, currentUser }) {
     if (!rep) {
       return {
         status: 'none',
-        label: 'No Verification Report',
+        label: isSimple ? 'No Verification Report' : 'No Telemetry Dossier',
         bg: 'bg-[#f2f4f6]',
         text: 'text-[#727780]',
         border: 'border-[#E5E7EB]'
       };
     }
-    switch (rep.status) {
-      case 'Reviewed':
-        return {
-          status: 'Reviewed',
-          label: 'Reviewed & Verified',
-          bg: 'bg-[#e8f5e9]',
-          text: 'text-[#1b6d24]',
-          border: 'border-[#1b6d24]/30',
-          reportId: rep.report_id
-        };
-      case 'Submitted for Review':
-        return {
-          status: 'Submitted for Review',
-          label: 'Submitted for Review',
-          bg: 'bg-[#e7f0f8]',
-          text: 'text-[#00355f]',
-          border: 'border-[#00355f]/30',
-          reportId: rep.report_id
-        };
-      case 'Further Information Required':
-        return {
-          status: 'Further Information Required',
-          label: 'Further Info Required',
-          bg: 'bg-[#fff3e6]',
-          text: 'text-[#F57C00]',
-          border: 'border-[#F57C00]/30',
-          reportId: rep.report_id
-        };
-      default:
-        return {
-          status: 'Draft',
-          label: 'Draft Report Saved',
-          bg: 'bg-[#fef9c3]',
-          text: 'text-[#854d0e]',
-          border: 'border-[#854d0e]/30',
-          reportId: rep.report_id
-        };
-    }
+    const statusInfo = getReportStatusLabel(rep.status, isSimple);
+    const badgeColors = {
+      Reviewed: { bg: 'bg-[#e8f5e9]', text: 'text-[#1b6d24]', border: 'border-[#1b6d24]/30' },
+      'Submitted for Review': { bg: 'bg-[#e7f0f8]', text: 'text-[#00355f]', border: 'border-[#00355f]/30' },
+      'Further Information Required': { bg: 'bg-[#fff3e6]', text: 'text-[#F57C00]', border: 'border-[#F57C00]/30' },
+      Draft: { bg: 'bg-[#fef9c3]', text: 'text-[#854d0e]', border: 'border-[#854d0e]/30' }
+    };
+    const colors = badgeColors[rep.status] || badgeColors.Draft;
+
+    return {
+      status: rep.status,
+      label: statusInfo.label,
+      bg: colors.bg,
+      text: colors.text,
+      border: colors.border,
+      reportId: rep.report_id
+    };
   };
 
   const handleOpenReportModal = (alert) => {

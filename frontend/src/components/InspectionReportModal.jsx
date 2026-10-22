@@ -16,46 +16,22 @@ import {
   Trash2,
   Download,
   Printer,
-  Eye
+  Eye,
+  Scale
 } from 'lucide-react';
 import { apiFetch } from '../config';
-import { exportReportToPrint } from '../utils/reportExport';
-
-const CHECK_OPTIONS = [
-  { id: 'sensor_condition_and_calibration', label: 'Sensor probe condition, zero-drift & field calibration' },
-  { id: 'original_readings', label: 'Original raw wastewater telemetry readings & loop current (4-20mA)' },
-  { id: 'operational_records', label: 'Plant operational records, batch logs & electricity consumption' },
-  { id: 'maintenance_logs', label: 'Sensor wash, cleaning & chemical dosing pump maintenance logs' },
-  { id: 'missing_readings_or_transmission', label: 'RTU transmission issues, buffer replays or missing packets' },
-  { id: 'other', label: 'Other physical verification checks (specify below)' },
-];
-
-const OUTCOME_OPTIONS = [
-  {
-    id: 'explained',
-    label: 'Explained by verified evidence',
-    description: 'Anomalous pattern is accounted for by verified equipment maintenance, sensor wash, or process change.',
-    badgeClass: 'bg-[#e8f5e9] text-[#1b6d24] border-[#1b6d24]/30'
-  },
-  {
-    id: 'inconclusive',
-    label: 'Inconclusive — further checks required',
-    description: 'Evidence is insufficient to confirm or refute anomaly cause; requires grab-sampling or follow-up.',
-    badgeClass: 'bg-[#fff3e6] text-[#F57C00] border-[#F57C00]/30'
-  },
-  {
-    id: 'unexplained',
-    label: 'Unusual readings remain unexplained',
-    description: 'Operational and maintenance records do not explain telemetry deviation; discrepancy flagged.',
-    badgeClass: 'bg-[#fdecec] text-[#D32F2F] border-[#D32F2F]/30'
-  },
-  {
-    id: 'referred',
-    label: 'Referred for further investigation',
-    description: 'Referred to regional regulatory authority / CPCB taskforce for formal on-site audit.',
-    badgeClass: 'bg-[#e7f0f8] text-[#00355f] border-[#00355f]/30'
-  }
-];
+import { useViewMode } from '../context/ViewModeContext';
+import {
+  CHECK_OPTIONS,
+  OUTCOME_OPTIONS,
+  AI_CONFIRMATION_OPTIONS,
+  SECTION_HELPER_TEXTS,
+  getReportStatusLabel
+} from '../utils/glossary';
+import {
+  exportOfficialOfficerBrief,
+  exportTechnicalDossier
+} from '../utils/reportExport';
 
 export function InspectionReportModal({
   isOpen,
@@ -66,12 +42,15 @@ export function InspectionReportModal({
   currentUser,
   onReportSaved
 }) {
+  const { isSimple, isTechnical } = useViewMode();
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('form'); // 'form' or 'history'
   const [errorMsg, setErrorMsg] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Form State
   const [currentReportId, setCurrentReportId] = useState(reportId || null);
@@ -82,6 +61,8 @@ export function InspectionReportModal({
   const [otherChecksDesc, setOtherChecksDesc] = useState('');
   const [findings, setFindings] = useState('');
   const [outcome, setOutcome] = useState('inconclusive');
+  const [aiConfirmation, setAiConfirmation] = useState('confirmed');
+  const [aiPredictionSnapshot, setAiPredictionSnapshot] = useState(null);
   const [evidenceRefs, setEvidenceRefs] = useState({
     doc_reference: '',
     maintenance_log: '',
@@ -111,6 +92,7 @@ export function InspectionReportModal({
       setErrorMsg(null);
       setSuccessMsg(null);
       setShowSubmitConfirm(false);
+      setShowExportModal(false);
       setActiveTab('form');
       if (reportId) {
         fetchExistingReport(reportId);
@@ -130,6 +112,8 @@ export function InspectionReportModal({
     setOtherChecksDesc('');
     setFindings('');
     setOutcome('inconclusive');
+    setAiConfirmation('confirmed');
+    setAiPredictionSnapshot(null);
     setEvidenceRefs({ doc_reference: '', maintenance_log: '', sample_id: '', other: '', supporting_reason: '', attachments: [] });
     setRevisions([]);
     setLinkedAlert(null);
@@ -197,7 +181,9 @@ export function InspectionReportModal({
       setOtherChecksDesc('');
       setFindings('');
       setOutcome('inconclusive');
-      setEvidenceRefs({ doc_reference: '', maintenance_log: '', sample_id: '', other: '', attachments: [] });
+      setAiConfirmation('confirmed');
+      setAiPredictionSnapshot(null);
+      setEvidenceRefs({ doc_reference: '', maintenance_log: '', sample_id: '', other: '', supporting_reason: '', attachments: [] });
       setRevisions([]);
       if (alertData) {
         setLinkedAlert(alertData);
@@ -217,6 +203,8 @@ export function InspectionReportModal({
     setOtherChecksDesc(data.other_checks_description || '');
     setFindings(data.findings || '');
     setOutcome(data.outcome || 'inconclusive');
+    setAiConfirmation(data.ai_confirmation || 'confirmed');
+    setAiPredictionSnapshot(data.ai_prediction_snapshot || null);
     setEvidenceRefs({
       doc_reference: data.evidence_references?.doc_reference || '',
       maintenance_log: data.evidence_references?.maintenance_log || '',
@@ -235,8 +223,8 @@ export function InspectionReportModal({
 
   const handleCheckToggle = (checkId) => {
     if (isReadOnly || isReviewed) return;
-    setChecksPerformed(prev =>
-      prev.includes(checkId) ? prev.filter(c => c !== checkId) : [...prev, checkId]
+    setChecksPerformed((prev) =>
+      prev.includes(checkId) ? prev.filter((c) => c !== checkId) : [...prev, checkId]
     );
   };
 
@@ -245,7 +233,7 @@ export function InspectionReportModal({
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    files.forEach(file => {
+    files.forEach((file) => {
       if (file.size > 10 * 1024 * 1024) {
         setErrorMsg(`File "${file.name}" exceeds the 10MB limit.`);
         return;
@@ -255,14 +243,15 @@ export function InspectionReportModal({
         const newAttachment = {
           id: `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           name: file.name,
-          size: file.size < 1024 * 1024
-            ? `${(file.size / 1024).toFixed(1)} KB`
-            : `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          size:
+            file.size < 1024 * 1024
+              ? `${(file.size / 1024).toFixed(1)} KB`
+              : `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
           type: file.type || 'application/octet-stream',
           dataUrl: loadEvt.target.result,
           uploadedAt: new Date().toISOString()
         };
-        setEvidenceRefs(prev => ({
+        setEvidenceRefs((prev) => ({
           ...prev,
           attachments: [...(prev.attachments || []), newAttachment]
         }));
@@ -274,17 +263,23 @@ export function InspectionReportModal({
 
   const removeAttachment = (attId) => {
     if (isReadOnly || isReviewed) return;
-    setEvidenceRefs(prev => ({
+    setEvidenceRefs((prev) => ({
       ...prev,
-      attachments: (prev.attachments || []).filter(a => a.id !== attId)
+      attachments: (prev.attachments || []).filter((a) => a.id !== attId)
     }));
   };
 
   const buildReportData = () => ({
     report_id: currentReportId || 'RPT-DRAFT',
-    alert_id: alertId || linkedAlert?.alert_id || (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : 'Routine'),
+    alert_id:
+      alertId ||
+      linkedAlert?.alert_id ||
+      (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : 'Routine'),
     factory_id: linkedAlert?.factory_id || selectedFacId || 'N/A',
-    factory_name: linkedAlert?.factory_name || availableFactories.find(f => f.factory_id === selectedFacId)?.name || 'Facility',
+    factory_name:
+      linkedAlert?.factory_name ||
+      availableFactories.find((f) => f.factory_id === selectedFacId)?.name ||
+      'Facility',
     inspection_date: inspectionDate,
     inspector_id: currentUser?.username || 'inspector',
     inspector_name: currentUser?.full_name || currentUser?.username || 'Field Inspector',
@@ -292,19 +287,22 @@ export function InspectionReportModal({
     other_checks_description: otherChecksDesc,
     findings: findings,
     outcome: outcome,
+    ai_confirmation: aiConfirmation,
+    ai_prediction_snapshot: aiPredictionSnapshot,
     evidence_references: evidenceRefs,
     status: reportStatus,
     admin_notes: adminNotes,
     admin_decision: adminDecision,
-    reviewed_by: reportStatus === 'Reviewed' ? (currentUser?.role === 'admin' ? currentUser.username : 'Regional Administrator') : null,
+    reviewed_by:
+      reportStatus === 'Reviewed'
+        ? currentUser?.role === 'admin'
+          ? currentUser.username
+          : 'Regional Administrator'
+        : null,
     reviewed_at: reportStatus === 'Reviewed' ? new Date().toISOString() : null,
     revisions: revisions,
     linked_alert: linkedAlert
   });
-
-  const handleDownloadReport = () => {
-    exportReportToPrint(buildReportData());
-  };
 
   const handleSaveDraft = async () => {
     setSaving(true);
@@ -314,7 +312,11 @@ export function InspectionReportModal({
     const effectiveAlertId =
       alertId ||
       linkedAlert?.alert_id ||
-      (selectedAlertMode === 'alert' && selectedAlertId ? selectedAlertId : (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : null));
+      (selectedAlertMode === 'alert' && selectedAlertId
+        ? selectedAlertId
+        : selectedFacId
+        ? `ROUTINE-${selectedFacId}-${inspectionDate}`
+        : null);
 
     if (!effectiveAlertId) {
       setErrorMsg('Please select a target facility or active anomaly alert before saving.');
@@ -329,6 +331,8 @@ export function InspectionReportModal({
       other_checks_description: otherChecksDesc,
       findings: findings || 'Preliminary inspection draft.',
       outcome: outcome,
+      ai_confirmation: aiConfirmation,
+      ai_prediction_snapshot: aiPredictionSnapshot,
       evidence_references: evidenceRefs,
       submit_immediately: false
     };
@@ -376,7 +380,11 @@ export function InspectionReportModal({
     const effectiveAlertId =
       alertId ||
       linkedAlert?.alert_id ||
-      (selectedAlertMode === 'alert' && selectedAlertId ? selectedAlertId : (selectedFacId ? `ROUTINE-${selectedFacId}-${inspectionDate}` : null));
+      (selectedAlertMode === 'alert' && selectedAlertId
+        ? selectedAlertId
+        : selectedFacId
+        ? `ROUTINE-${selectedFacId}-${inspectionDate}`
+        : null);
 
     if (!effectiveAlertId) {
       setErrorMsg('Please select a target facility or active anomaly alert before submitting.');
@@ -390,7 +398,6 @@ export function InspectionReportModal({
     try {
       let reportToSubmitId = currentReportId;
 
-      // If not yet saved in DB, create it first as Draft
       if (!reportToSubmitId) {
         const createRes = await apiFetch(`/api/reports`, {
           method: 'POST',
@@ -401,6 +408,8 @@ export function InspectionReportModal({
             other_checks_description: otherChecksDesc,
             findings: findings,
             outcome: outcome,
+            ai_confirmation: aiConfirmation,
+            ai_prediction_snapshot: aiPredictionSnapshot,
             evidence_references: evidenceRefs,
             submit_immediately: false
           })
@@ -413,7 +422,6 @@ export function InspectionReportModal({
         }
         reportToSubmitId = createdJson.report_id;
       } else {
-        // Save latest edits first
         await apiFetch(`/api/reports/${reportToSubmitId}`, {
           method: 'PUT',
           body: JSON.stringify({
@@ -422,12 +430,13 @@ export function InspectionReportModal({
             other_checks_description: otherChecksDesc,
             findings: findings,
             outcome: outcome,
+            ai_confirmation: aiConfirmation,
+            ai_prediction_snapshot: aiPredictionSnapshot,
             evidence_references: evidenceRefs
           })
         });
       }
 
-      // Submit for admin review
       const subRes = await apiFetch(`/api/reports/${reportToSubmitId}/submit`, {
         method: 'POST'
       });
@@ -484,10 +493,24 @@ export function InspectionReportModal({
 
   if (!isOpen) return null;
 
+  const statusLabel = getReportStatusLabel(reportStatus, isSimple);
+
+  // Derive snapshot values for display
+  const snapshotData = aiPredictionSnapshot || {
+    plain_summary:
+      linkedAlert?.tamper_label ||
+      'AI telemetry surveillance flagged an unusual drop or variance pattern requiring physical ground verification.',
+    score: linkedAlert?.tamper_score || 0.74,
+    raw_score: linkedAlert?.tamper_score || 0.74,
+    severity_band: linkedAlert?.severity || 'High',
+    model_version: 'ForensiAir-XGBoost-Ensemble-v2.4',
+    triggered_fingerprints: ['sensor_zero_variance', 'flow_decoupling'],
+    time_window: 'Continuous 24h Telemetry Stream'
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white border border-[#E5E7EB] rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Modal Header */}
         <div className="p-5 border-b border-[#E5E7EB] bg-[#f8f9fb] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -497,7 +520,7 @@ export function InspectionReportModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-headline-md text-headline-md text-[#00355f]">
-                  Inspection Verification Report
+                  {SECTION_HELPER_TEXTS.reportTitle}
                 </h2>
                 {currentReportId && (
                   <span className="font-mono text-xs font-bold bg-[#00355f]/10 text-[#00355f] px-2 py-0.5 rounded">
@@ -506,20 +529,15 @@ export function InspectionReportModal({
                 )}
               </div>
               <p className="text-xs text-[#727780]">
-                Official on-site verification & inspector findings documentation
+                {SECTION_HELPER_TEXTS.subtitle[isSimple ? 'simple' : 'technical']}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Status Badge */}
-            <span className={`badge-status ${
-              reportStatus === 'Reviewed' ? 'badge-status-reviewed' :
-              reportStatus === 'Submitted for Review' ? 'badge-status-submitted' :
-              reportStatus === 'Further Information Required' ? 'badge-status-query' :
-              'badge-status-draft'
-            }`}>
-              {reportStatus}
+            <span className={`badge-status ${statusLabel.badge}`}>
+              {statusLabel.label}
             </span>
 
             <button
@@ -537,15 +555,19 @@ export function InspectionReportModal({
           <button
             onClick={() => setActiveTab('form')}
             className={`py-2.5 border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === 'form' ? 'border-[#00355f] text-[#00355f]' : 'border-transparent text-[#727780]'
+              activeTab === 'form'
+                ? 'border-[#00355f] text-[#00355f]'
+                : 'border-transparent text-[#727780]'
             }`}
           >
-            <FileText size={14} /> Verification Form
+            <FileText size={14} /> Verification &amp; Decision Form
           </button>
           <button
             onClick={() => setActiveTab('history')}
             className={`py-2.5 border-b-2 flex items-center gap-1.5 transition-colors ml-6 ${
-              activeTab === 'history' ? 'border-[#00355f] text-[#00355f]' : 'border-transparent text-[#727780]'
+              activeTab === 'history'
+                ? 'border-[#00355f] text-[#00355f]'
+                : 'border-transparent text-[#727780]'
             }`}
           >
             <History size={14} /> Revision Audit Trail ({revisions.length})
@@ -553,7 +575,7 @@ export function InspectionReportModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 relative">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 relative">
           {loading && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-2xs flex items-center justify-center z-20">
               <div className="flex items-center gap-2 text-xs font-bold text-[#00355f]">
@@ -584,7 +606,7 @@ export function InspectionReportModal({
               {linkedAlert ? (
                 <div className="p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl space-y-2">
                   <div className="font-bold text-[#00355f] flex items-center gap-2 text-xs uppercase tracking-wider">
-                    <AlertTriangle size={14} /> Linked Anomaly Signal
+                    <AlertTriangle size={14} /> Linked Surveillance Event
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
@@ -592,13 +614,13 @@ export function InspectionReportModal({
                       <strong className="text-[#191c1e] text-xs">{linkedAlert.factory_name}</strong>
                     </div>
                     <div>
-                      <span className="text-[#727780] block text-[11px]">Alert ID / Event:</span>
+                      <span className="text-[#727780] block text-[11px]">Alert ID:</span>
                       <strong className="font-mono text-[#00355f] text-xs">{linkedAlert.alert_id}</strong>
                     </div>
                     <div>
-                      <span className="text-[#727780] block text-[11px]">Signal / Pattern:</span>
+                      <span className="text-[#727780] block text-[11px]">Pattern / Parameter:</span>
                       <span className="font-medium text-[#191c1e] text-xs">
-                        {linkedAlert.tamper_label || linkedAlert.alert_type || 'Statistical Anomaly'}
+                        {linkedAlert.parameter || 'Effluent'} • {linkedAlert.tamper_label || linkedAlert.alert_type || 'Anomaly'}
                       </span>
                     </div>
                   </div>
@@ -607,14 +629,16 @@ export function InspectionReportModal({
                 <div className="p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl space-y-3">
                   <div className="font-bold text-[#00355f] flex items-center justify-between text-xs uppercase tracking-wider">
                     <div className="flex items-center gap-2">
-                      <Building2 size={14} /> Target Facility & Inspection Scope
+                      <Building2 size={14} /> Target Facility &amp; Inspection Scope
                     </div>
                     <span className="text-[10px] text-[#727780] font-normal">Select facility to file report</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Select Facility <span className="text-[#D32F2F]">*</span></label>
+                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">
+                        Select Facility <span className="text-[#D32F2F]">*</span>
+                      </label>
                       <select
                         value={selectedFacId}
                         disabled={isReadOnly || isReviewed || !!currentReportId}
@@ -627,7 +651,7 @@ export function InspectionReportModal({
                         {availableFactories.length === 0 ? (
                           <option value="">Loading facilities...</option>
                         ) : (
-                          availableFactories.map(f => (
+                          availableFactories.map((f) => (
                             <option key={f.factory_id} value={f.factory_id}>
                               {f.factory_id}: {f.name || f.factory_name} ({f.region || 'Industrial Zone'})
                             </option>
@@ -637,7 +661,7 @@ export function InspectionReportModal({
                     </div>
 
                     <div>
-                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Inspection Type</label>
+                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Inspection Scope</label>
                       <div className="flex items-center gap-3 mt-1.5">
                         <label className="flex items-center gap-1.5 cursor-pointer text-xs">
                           <input
@@ -647,7 +671,7 @@ export function InspectionReportModal({
                             onChange={() => setSelectedAlertMode('routine')}
                             disabled={isReadOnly || isReviewed || !!currentReportId}
                           />
-                          <span className="font-medium text-[#191c1e]">Routine / Scheduled</span>
+                          <span className="font-medium text-[#191c1e]">Routine Field Audit</span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer text-xs">
                           <input
@@ -657,7 +681,7 @@ export function InspectionReportModal({
                             onChange={() => setSelectedAlertMode('alert')}
                             disabled={isReadOnly || isReviewed || !!currentReportId}
                           />
-                          <span className="font-medium text-[#191c1e]">Link Anomaly Alert</span>
+                          <span className="font-medium text-[#191c1e]">Link Anomaly Signal</span>
                         </label>
                       </div>
                     </div>
@@ -665,7 +689,7 @@ export function InspectionReportModal({
 
                   {selectedAlertMode === 'alert' && (
                     <div className="pt-2 border-t border-[#E5E7EB]">
-                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Choose Active Alert:</label>
+                      <label className="text-[#727780] block text-[11px] mb-1 font-bold">Choose Active Signal:</label>
                       <select
                         value={selectedAlertId}
                         disabled={isReadOnly || isReviewed || !!currentReportId}
@@ -674,24 +698,19 @@ export function InspectionReportModal({
                       >
                         <option value="">-- Choose alert from list --</option>
                         {availableAlerts
-                          .filter(a => !selectedFacId || a.factory_id === selectedFacId)
-                          .map(a => (
+                          .filter((a) => !selectedFacId || a.factory_id === selectedFacId)
+                          .map((a) => (
                             <option key={a.alert_id} value={a.alert_id}>
                               {a.alert_id} — {a.parameter} {a.tamper_type || a.alert_type} ({a.severity})
                             </option>
                           ))}
                       </select>
-                      {availableAlerts.filter(a => !selectedFacId || a.factory_id === selectedFacId).length === 0 && (
-                        <p className="text-[11px] text-[#F57C00] mt-1">
-                          No active alerts found for this facility. Will automatically register as a Routine Audit.
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Section A: Inspection Meta */}
+              {/* Meta: Inspection Date & Inspector Identity */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="font-bold text-[#191c1e] block mb-1">
@@ -714,34 +733,212 @@ export function InspectionReportModal({
                     <User size={14} className="text-[#727780]" />
                     <span>{currentUser?.username || 'Field Inspector'}</span>
                     <span className="text-[10px] text-[#727780] bg-white px-2 py-0.5 rounded border border-[#E5E7EB]">
-                      Authenticated Context
+                      SPCB Authorized Context
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Section B: Checks Performed */}
+              {/* SIDE-BY-SIDE BOX: PREDICTION vs FIELD FINDING (Requirement 5) */}
+              <div className="border border-[#cbd5e1] rounded-xl overflow-hidden bg-white shadow-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#cbd5e1]">
+                  {/* LEFT: Frozen Snapshot of AI Prediction */}
+                  <div className="p-4 bg-[#f8fafc] flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-[#00355f] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <AlertTriangle size={14} />
+                          {SECTION_HELPER_TEXTS.predictionBoxHeading[isSimple ? 'simple' : 'technical']}
+                        </span>
+                        <span className="text-[10px] bg-[#00355f]/10 text-[#00355f] font-mono px-1.5 py-0.5 rounded font-semibold">
+                          Frozen Snapshot
+                        </span>
+                      </div>
+
+                      {isSimple ? (
+                        /* PLAIN MODE: Plain sentences describing what AI flagged */
+                        <div className="space-y-2 text-xs text-[#334155] leading-relaxed">
+                          <p className="font-medium bg-white p-3 rounded-lg border border-[#e2e8f0]">
+                            {snapshotData.plain_summary}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                            <div className="bg-white p-2 rounded border border-[#e2e8f0]">
+                              <span className="text-[#64748b] block text-[10px] uppercase font-bold">Severity Band</span>
+                              <strong className="text-[#00355f]">{snapshotData.severity_band}</strong>
+                            </div>
+                            <div className="bg-white p-2 rounded border border-[#e2e8f0]">
+                              <span className="text-[#64748b] block text-[10px] uppercase font-bold">Surveillance Window</span>
+                              <span className="text-[#334155]">{snapshotData.time_window || 'Continuous 24h'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* TECHNICAL MODE: Score, SHAP, fingerprints, XGBoost output label */
+                        <div className="space-y-2 text-xs text-[#334155]">
+                          <div className="bg-white p-2.5 rounded-lg border border-[#e2e8f0] space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-[#64748b] uppercase">
+                                Model output (not a calibrated probability):
+                              </span>
+                              <span className="font-mono text-sm font-bold text-[#00355f]">
+                                {snapshotData.raw_score !== undefined ? snapshotData.raw_score : snapshotData.score}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-[#64748b]">
+                              Raw tree margin output from {snapshotData.model_version || 'ForensiAir-XGBoost-Ensemble-v2.4'}
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-2.5 rounded-lg border border-[#e2e8f0] space-y-1">
+                            <span className="text-[10px] font-bold text-[#64748b] uppercase block">
+                              Triggered Fingerprint Signatures:
+                            </span>
+                            <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                              {(snapshotData.triggered_fingerprints || []).map((fp, i) => (
+                                <span key={i} className="bg-[#e7f0f8] text-[#00355f] px-1.5 py-0.5 rounded border border-[#00355f]/20">
+                                  {fp}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {snapshotData.top_shap_features && (
+                            <div className="bg-white p-2 rounded-lg border border-[#e2e8f0]">
+                              <span className="text-[10px] font-bold text-[#64748b] uppercase block mb-1">
+                                Top SHAP Feature Contributions:
+                              </span>
+                              <div className="space-y-0.5 font-mono text-[10px]">
+                                {snapshotData.top_shap_features.map((sf, idx) => (
+                                  <div key={idx} className="flex justify-between">
+                                    <span className="text-[#475569]">{sf.feature}</span>
+                                    <span className={sf.shap_value > 0 ? 'text-[#b91c1c]' : 'text-[#15803d]'}>
+                                      {sf.shap_value > 0 ? `+${sf.shap_value}` : sf.shap_value}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-[10px] text-[#64748b] italic pt-1 border-t border-[#e2e8f0]">
+                      * Snapshot locked at alert generation. Never alters with field inputs.
+                    </div>
+                  </div>
+
+                  {/* RIGHT: Inspector Ground Observations */}
+                  <div className="p-4 bg-white flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="font-bold text-[#191c1e] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 size={14} className="text-[#15803d]" />
+                          {SECTION_HELPER_TEXTS.findingsHeading[isSimple ? 'simple' : 'technical']} <span className="text-[#D32F2F]">*</span>
+                        </label>
+                        <span className="text-[10px] text-[#727780]">Ground Truth</span>
+                      </div>
+                      <textarea
+                        rows={7}
+                        disabled={isReadOnly || isReviewed}
+                        value={findings}
+                        onChange={(e) => setFindings(e.target.value)}
+                        placeholder="Describe what was checked at the facility: physical probe condition, water clarity, dosing pumps, meter logs, and factory explanations..."
+                        className="w-full bg-[#f8f9fb] border border-[#E5E7EB] rounded-lg p-3 text-xs text-[#191c1e] focus:outline-none focus:border-[#00355f] leading-relaxed resize-none"
+                      />
+                    </div>
+                    <div className="text-[10px] text-[#727780] flex justify-between">
+                      <span>Must record specific physical conditions observed.</span>
+                      <span>{findings.length} characters</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* NEW FIELD: DID THE VISIT CONFIRM THE AI PREDICTION? (Requirement 4) */}
+              <div className="p-4 bg-[#f8fafc] border border-[#cbd5e1] rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-[#00355f] text-xs flex items-center gap-1.5">
+                    <Scale size={14} />
+                    {SECTION_HELPER_TEXTS.confirmationHeading[isSimple ? 'simple' : 'technical']}
+                    <span className="text-[#D32F2F]">*</span>
+                  </label>
+                  <span className="text-[10px] text-[#64748b]">Model Feedback Loop Data</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {AI_CONFIRMATION_OPTIONS.map((confOpt) => {
+                    const isSelected = aiConfirmation === confOpt.id;
+                    const optContent = isSimple ? confOpt.simple : confOpt.technical;
+                    return (
+                      <div
+                        key={confOpt.id}
+                        onClick={() => !(isReadOnly || isReviewed) && setAiConfirmation(confOpt.id)}
+                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-[#00355f] bg-[#e7f0f8] ring-1 ring-[#00355f]'
+                            : 'border-[#E5E7EB] bg-white hover:bg-[#fafbfc]'
+                        } ${isReadOnly || isReviewed ? 'opacity-70 pointer-events-none' : ''}`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-xs text-[#0f172a]">{optContent.label}</span>
+                          <span
+                            className={`w-3 h-3 rounded-full border ${
+                              isSelected ? 'bg-[#00355f] border-[#00355f]' : 'border-[#cbd5e1]'
+                            }`}
+                          />
+                        </div>
+                        <p className="text-[10px] text-[#64748b] leading-tight">{optContent.description}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section B: Checks Performed (Requirement 7: Checklists with Pipe Tracing & Optional Technical Checks) */}
               <div className="space-y-2">
-                <label className="font-bold text-[#191c1e] block">
-                  Checks Performed on Site <span className="text-[#D32F2F]">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-[#191c1e] text-xs block">
+                    Physical On-Site Verification Checks Conducted <span className="text-[#D32F2F]">*</span>
+                  </label>
+                  <span className="text-[10px] text-[#727780]">Select all checks executed on site</span>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {CHECK_OPTIONS.map((chk) => {
                     const isChecked = checksPerformed.includes(chk.id);
+                    const optContent = isSimple ? chk.simple : chk.technical;
+
                     return (
                       <label
                         key={chk.id}
-                        className={`check-item-card ${isChecked ? 'selected' : ''} ${(isReadOnly || isReviewed) ? 'disabled opacity-70 pointer-events-none' : ''}`}
+                        className={`check-item-card p-3 rounded-lg border flex items-start gap-2.5 cursor-pointer transition-all ${
+                          isChecked
+                            ? 'bg-[#f0fdf4] border-[#166534] ring-1 ring-[#166534]'
+                            : 'bg-white border-[#E5E7EB] hover:bg-[#f8fafc]'
+                        } ${isReadOnly || isReviewed ? 'opacity-70 pointer-events-none' : ''}`}
                       >
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => handleCheckToggle(chk.id)}
                           disabled={isReadOnly || isReviewed}
+                          className="mt-0.5 rounded text-[#00355f]"
                         />
-                        <span className="text-xs text-[#42474f] font-medium leading-tight">
-                          {chk.label}
-                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs text-[#0f172a] font-bold leading-tight">
+                              {optContent.label}
+                            </span>
+                            {chk.isTechnicalOnly && (
+                              <span className="text-[9px] font-bold bg-[#e0f2fe] text-[#0369a1] px-1.5 py-0.5 rounded">
+                                Optional / Technical Check
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10.5px] text-[#64748b] mt-0.5 leading-snug">
+                            {optContent.hint}
+                          </p>
+                        </div>
                       </label>
                     );
                   })}
@@ -761,42 +958,38 @@ export function InspectionReportModal({
                 )}
               </div>
 
-              {/* Section C: Findings & Observations */}
-              <div className="space-y-1">
-                <label className="font-bold text-[#191c1e] block">
-                  Inspection Findings & Observations <span className="text-[#D32F2F]">*</span>
-                </label>
-                <textarea
-                  rows={4}
-                  disabled={isReadOnly || isReviewed}
-                  value={findings}
-                  onChange={(e) => setFindings(e.target.value)}
-                  placeholder="Describe in detail what was checked at the facility, probe conditions, physical water clarity, dosing system status, and explanation for anomalous telemetry readings..."
-                  className="w-full bg-[#f8f9fb] border border-[#E5E7EB] rounded-lg p-3 text-xs text-[#191c1e] focus:outline-none focus:border-[#00355f] leading-relaxed"
-                />
-              </div>
-
-              {/* Section D: Inspection Outcome */}
+              {/* Section D: Ground Verification Finding Outcome (Requirement 1 & 2: Single Record, Exact Outcome Wording) */}
               <div className="space-y-2">
-                <label className="font-bold text-[#191c1e] block">
-                  Inspection Outcome & Conclusion <span className="text-[#D32F2F]">*</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-[#191c1e] text-xs block">
+                    {SECTION_HELPER_TEXTS.outcomeHeading[isSimple ? 'simple' : 'technical']} <span className="text-[#D32F2F]">*</span>
+                  </label>
+                  <span className="text-[10px] text-[#727780]">Ground Truth Conclusion</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {OUTCOME_OPTIONS.map((opt) => {
                     const isSelected = outcome === opt.id;
+                    const optContent = isSimple ? opt.simple : opt.technical;
                     return (
                       <div
                         key={opt.id}
                         onClick={() => !(isReadOnly || isReviewed) && setOutcome(opt.id)}
                         className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                          isSelected ? 'border-[#00355f] bg-[#e7f0f8]/40 ring-1 ring-[#00355f]' : 'border-[#E5E7EB] bg-white hover:bg-[#fafbfc]'
-                        } ${(isReadOnly || isReviewed) ? 'opacity-70 pointer-events-none' : ''}`}
+                          isSelected
+                            ? 'border-[#00355f] bg-[#e7f0f8]/50 ring-1 ring-[#00355f]'
+                            : 'border-[#E5E7EB] bg-white hover:bg-[#fafbfc]'
+                        } ${isReadOnly || isReviewed ? 'opacity-70 pointer-events-none' : ''}`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-xs text-[#191c1e]">{opt.label}</span>
-                          <span className={`w-3 h-3 rounded-full border ${isSelected ? 'bg-[#00355f] border-[#00355f]' : 'border-[#c2c7d1]'}`} />
+                          <span className="font-bold text-xs text-[#191c1e]">{optContent.label}</span>
+                          <span
+                            className={`w-3 h-3 rounded-full border ${
+                              isSelected ? 'bg-[#00355f] border-[#00355f]' : 'border-[#c2c7d1]'
+                            }`}
+                          />
                         </div>
-                        <p className="text-[11px] text-[#727780] leading-snug">{opt.description}</p>
+                        <p className="text-[11px] text-[#727780] leading-snug">{optContent.description}</p>
                       </div>
                     );
                   })}
@@ -807,7 +1000,7 @@ export function InspectionReportModal({
               <div className="space-y-4 p-4 bg-[#f8f9fb] border border-[#E5E7EB] rounded-xl">
                 <div className="font-bold text-[#00355f] text-xs uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <ShieldCheck size={14} /> Supporting Evidence & Compliance Rationale
+                    <ShieldCheck size={14} /> Supporting Evidence &amp; Compliance Rationale
                   </span>
                   <span className="text-[10px] text-[#727780] font-normal">Documents justifying outcome</span>
                 </div>
@@ -815,20 +1008,24 @@ export function InspectionReportModal({
                 {/* Technical Justification / Documented Reason */}
                 <div>
                   <label className="text-[11px] font-bold text-[#191c1e] block mb-1">
-                    Documented Reason & Technical Justification
+                    Documented Reason &amp; Compliance Justification
                   </label>
                   <div className="space-y-1.5">
                     <select
                       disabled={isReadOnly || isReviewed}
                       value={
-                        ['Sensor probe recalibration and zero-drift wash verified in plant maintenance log',
-                         'Process batch production paused / ETP plant shut down during telemetry episode',
-                         'Grab sample analysis conforms to effluent discharge CTO limits',
-                         'Telemetry deviation confirmed as physical tampering / sensor bypass conduit',
-                         'Flow meter pulse rate transmission buffer replay',
-                         'Inconclusive evidence: awaiting 5-day BOD laboratory results'].includes(evidenceRefs.supporting_reason)
+                        [
+                          'Sensor probe recalibration and zero-drift wash verified in plant maintenance log',
+                          'Process batch production paused / ETP plant shut down during telemetry episode',
+                          'Grab sample analysis conforms to effluent discharge CTO limits',
+                          'Telemetry deviation confirmed as physical tampering / sensor bypass conduit',
+                          'Flow meter pulse rate transmission buffer replay',
+                          'Inconclusive evidence: awaiting 5-day BOD laboratory results'
+                        ].includes(evidenceRefs.supporting_reason)
                           ? evidenceRefs.supporting_reason
-                          : evidenceRefs.supporting_reason ? 'Other' : ''
+                          : evidenceRefs.supporting_reason
+                          ? 'Other'
+                          : ''
                       }
                       onChange={(e) => {
                         if (e.target.value !== 'Other') {
@@ -931,7 +1128,7 @@ export function InspectionReportModal({
                     <div>
                       <span className="font-bold text-[#191c1e] text-xs flex items-center gap-1.5">
                         <Paperclip size={14} className="text-[#00355f]" />
-                        Supporting Files & Photographic Evidence ({evidenceRefs.attachments?.length || 0})
+                        Supporting Files &amp; Photographic Evidence ({evidenceRefs.attachments?.length || 0})
                       </span>
                       <p className="text-[11px] text-[#727780]">
                         Attach sensor photos, ETP outfalls, grab sample seals, or scanned calibration PDFs (max 10MB per file).
@@ -954,10 +1151,12 @@ export function InspectionReportModal({
                   </div>
 
                   {/* Attachments List / Grid */}
-                  {(!evidenceRefs.attachments || evidenceRefs.attachments.length === 0) ? (
-                    <label className={`evidence-dropzone flex flex-col items-center justify-center gap-1.5 ${
-                      (isReadOnly || isReviewed) ? 'disabled opacity-75' : ''
-                    }`}>
+                  {!evidenceRefs.attachments || evidenceRefs.attachments.length === 0 ? (
+                    <label
+                      className={`evidence-dropzone flex flex-col items-center justify-center gap-1.5 p-6 border-2 border-dashed border-[#cbd5e1] rounded-xl cursor-pointer hover:border-[#00355f] transition-colors ${
+                        isReadOnly || isReviewed ? 'disabled opacity-75' : ''
+                      }`}
+                    >
                       <div className="w-8 h-8 rounded-full bg-[#f2f4f6] text-[#727780] flex items-center justify-center">
                         <Paperclip size={16} />
                       </div>
@@ -980,11 +1179,14 @@ export function InspectionReportModal({
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {evidenceRefs.attachments.map((att) => {
-                        const isImg = att.type?.startsWith('image/') || att.dataUrl?.startsWith('data:image/');
+                        const isImg =
+                          att.type?.startsWith('image/') || att.dataUrl?.startsWith('data:image/');
                         return (
                           <div
                             key={att.id}
-                            className={`attachment-chip ${isImg ? 'cursor-pointer hover:border-[#00355f] hover:bg-[#f0f7ff]/50' : ''}`}
+                            className={`attachment-chip p-2.5 rounded-lg border border-[#E5E7EB] bg-white flex items-center justify-between ${
+                              isImg ? 'cursor-pointer hover:border-[#00355f] hover:bg-[#f0f7ff]/50' : ''
+                            }`}
                             onClick={() => isImg && setPreviewImage(att)}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -1009,15 +1211,20 @@ export function InspectionReportModal({
                                   {att.name}
                                 </p>
                                 <div className="flex items-center gap-2 text-[10px] text-[#727780] mt-0.5">
-                                  <span className="font-semibold text-[#00355f] bg-[#e7f0f8] px-1 rounded">{att.size}</span>
+                                  <span className="font-semibold text-[#00355f] bg-[#e7f0f8] px-1 rounded">
+                                    {att.size}
+                                  </span>
                                   <span>•</span>
                                   <span>{new Date(att.uploadedAt).toLocaleDateString()}</span>
-                                  {isImg && <span className="text-[#10b981] font-semibold">• Click to view photo</span>}
+                                  {isImg && <span className="text-[#10b981] font-semibold">• Click to view</span>}
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+                            <div
+                              className="flex items-center gap-1 shrink-0 ml-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               {isImg && (
                                 <button
                                   type="button"
@@ -1057,69 +1264,71 @@ export function InspectionReportModal({
                 </div>
               </div>
 
-              {/* Section F: Administrator Review (Visible if Admin or if reviewed/notes present) */}
-              {(isAdmin || adminNotes) && (
-                <div className="p-4 bg-[#fff9f0] border border-[#F57C00]/30 rounded-xl space-y-3">
-                  <div className="font-bold text-[#b45309] text-xs uppercase tracking-wider flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <ShieldCheck size={14} /> Administrator Review & Decision
-                    </span>
-                    {isAdmin && (
-                      <span className="text-[10px] bg-[#F57C00]/10 text-[#F57C00] px-2 py-0.5 rounded font-mono">
-                        Admin Controls Active
-                      </span>
-                    )}
-                  </div>
-
-                  {isAdmin ? (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-[11px] font-bold text-[#191c1e] block mb-1">
-                          Review Decision
-                        </label>
-                        <select
-                          value={adminDecision}
-                          onChange={(e) => setAdminDecision(e.target.value)}
-                          className="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-1.5 text-xs font-bold text-[#00355f] focus:outline-none"
-                        >
-                          <option value="Reviewed">Approve & Mark as Reviewed</option>
-                          <option value="Further Information Required">Request Further Information</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[11px] font-bold text-[#191c1e] block mb-1">
-                          Admin Review Notes <span className="text-[#D32F2F]">*</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={adminNotes}
-                          onChange={(e) => setAdminNotes(e.target.value)}
-                          placeholder="Record review notes, verification findings, or specific queries required from field inspector..."
-                          className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2.5 text-xs text-[#191c1e] focus:outline-none"
-                        />
-                      </div>
-
-                      <button
-                        onClick={handleAdminReview}
-                        disabled={saving}
-                        className="px-4 py-2 bg-[#00355f] text-white rounded-lg font-bold text-xs hover:bg-[#0f4c81] transition-colors disabled:opacity-50"
-                      >
-                        {saving ? 'Recording Decision...' : 'Record Administrator Decision'}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-[#42474f] space-y-1">
-                      <div>
-                        <strong>Review Status:</strong> {reportStatus}
-                      </div>
-                      <div>
-                        <strong>Admin Notes:</strong> {adminNotes}
-                      </div>
-                    </div>
-                  )}
+              {/* SECTION F: DECISION BY OFFICER (Requirement 3: SEPARATE STAGES — Officer-Entered Only, Never Auto-Generated) */}
+              <div className="p-4 bg-[#fff9f0] border border-[#F57C00]/30 rounded-xl space-y-3">
+                <div className="font-bold text-[#b45309] text-xs uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck size={14} /> {SECTION_HELPER_TEXTS.decisionHeading[isSimple ? 'simple' : 'technical']}
+                  </span>
+                  <span className="text-[10px] bg-[#F57C00]/10 text-[#F57C00] px-2 py-0.5 rounded font-mono font-bold">
+                    Officer-Entered Only (Never Auto-Generated)
+                  </span>
                 </div>
-              )}
+
+                {isAdmin ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-[#191c1e] block mb-1">
+                        Administrative Action / Statutory Decision
+                      </label>
+                      <select
+                        value={adminDecision}
+                        onChange={(e) => setAdminDecision(e.target.value)}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-3 py-1.5 text-xs font-bold text-[#00355f] focus:outline-none"
+                      >
+                        <option value="Reviewed">Approve &amp; Close Verification Dossier</option>
+                        <option value="Further Information Required">Request Clarification / Grab Sampling from Inspector</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-[#191c1e] block mb-1">
+                        Officer Directives &amp; Action Notes <span className="text-[#D32F2F]">*</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={adminNotes}
+                        onChange={(e) => setAdminNotes(e.target.value)}
+                        placeholder="Enter official directives, penalties, show-cause notice refs, or closure instructions..."
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2.5 text-xs text-[#191c1e] focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleAdminReview}
+                      disabled={saving}
+                      className="px-4 py-2 bg-[#00355f] text-white rounded-lg font-bold text-xs hover:bg-[#0f4c81] transition-colors disabled:opacity-50"
+                    >
+                      {saving ? 'Recording Decision...' : 'Record Officer Decision'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-[#42474f] space-y-1.5">
+                    <div>
+                      <strong>Review Status:</strong> {statusLabel.label}
+                    </div>
+                    <div>
+                      <strong>Officer Directives:</strong> {adminNotes || 'Awaiting Senior Officer Review.'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Statutory Legal Disclaimer (Requirement 6: VERBATIM in both modes) */}
+                <div className="p-3 bg-white border border-[#e2e8f0] rounded-lg text-[10.5px] text-[#475569] leading-relaxed">
+                  <strong className="text-[#00355f]">Section F Statutory Notice: </strong>
+                  {SECTION_HELPER_TEXTS.legalDisclaimer}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1127,7 +1336,7 @@ export function InspectionReportModal({
           {activeTab === 'history' && (
             <div className="space-y-4">
               <div className="p-3 bg-[#f8f9fb] border border-[#E5E7EB] rounded-lg text-xs text-[#727780]">
-                Immutable server audit log recording all changes, submissions, and administrator reviews.
+                Immutable server audit log recording all changes, submissions, and officer review decisions.
               </div>
 
               {revisions.length === 0 ? (
@@ -1160,22 +1369,23 @@ export function InspectionReportModal({
         <div className="p-4 border-t border-[#E5E7EB] bg-[#f8f9fb] flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="text-[11px] text-[#727780]">
             {isReviewed ? (
-              <span className="text-[#1b6d24] font-bold">✓ This report has been reviewed and finalized.</span>
+              <span className="text-[#1b6d24] font-bold">✓ This report has been reviewed and closed by Senior Officer.</span>
             ) : isReadOnly ? (
-              <span>Locked for Admin Review. Inspectors cannot overwrite submitted reports.</span>
+              <span>Locked for Officer Review. Field inspectors cannot overwrite submitted reports.</span>
             ) : (
               <span>Drafts are saved locally in database until submitted.</span>
             )}
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Export Choice Modal Trigger (Requirement 8) */}
             <button
               type="button"
-              onClick={handleDownloadReport}
+              onClick={() => setShowExportModal(true)}
               className="flex items-center gap-1.5 px-4 py-2 border border-[#00355f] bg-[#e7f0f8] text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#d5e7f6] transition-colors"
             >
               <Printer size={14} />
-              <span>Download PDF</span>
+              <span>Export PDF / Dossier</span>
             </button>
 
             <button
@@ -1209,6 +1419,90 @@ export function InspectionReportModal({
           </div>
         </div>
 
+        {/* EXPORT CHOICE MODAL (Requirement 8: Export Choice Independent of Current Toggle State) */}
+        {showExportModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[999]">
+            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-[#cbd5e1] space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-2 border-b border-[#E5E7EB]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#00355f] text-white flex items-center justify-center">
+                    <Download size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-[#00355f]">Select Export Document Format</h3>
+                    <p className="text-[11px] text-[#64748b]">Select document type to print or download as PDF</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="p-1 rounded text-[#94a3b8] hover:text-[#0f172a]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Choice 1: Official Officer Brief */}
+                <div
+                  onClick={() => {
+                    setShowExportModal(false);
+                    exportOfficialOfficerBrief(buildReportData());
+                  }}
+                  className="p-4 rounded-xl border-2 border-[#00355f] bg-[#f0f7ff] hover:bg-[#e0efff] cursor-pointer transition-all space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-[#00355f] uppercase tracking-wide">
+                      📄 Official Officer Brief (Recommended)
+                    </span>
+                    <span className="text-[10px] bg-[#00355f] text-white px-2 py-0.5 rounded font-bold">
+                      Official Brief
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#334155] leading-relaxed">
+                    1-page executive summary organized into three blocks: <strong>Block 1: AI Finding Predicted</strong>, <strong>Block 2: Field Verification Observed</strong>, and <strong>Block 3: Decision by Officer</strong>, followed by a Technical Appendix with chain of custody and photo proofs.
+                  </p>
+                  <div className="text-[10.5px] text-[#00355f] font-semibold pt-1">
+                    ✓ Recommended for regional officers, judicial records, and administrative review.
+                  </div>
+                </div>
+
+                {/* Choice 2: Technical Dossier Export */}
+                <div
+                  onClick={() => {
+                    setShowExportModal(false);
+                    exportTechnicalDossier(buildReportData());
+                  }}
+                  className="p-4 rounded-xl border border-[#cbd5e1] bg-white hover:bg-[#f8fafc] cursor-pointer transition-all space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-[#0f172a] uppercase tracking-wide">
+                      🔬 Technical Dossier Export
+                    </span>
+                    <span className="text-[10px] bg-[#f1f5f9] text-[#475569] px-2 py-0.5 rounded font-bold">
+                      ML &amp; Diagnostics
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#64748b] leading-relaxed">
+                    Comprehensive telemetry forensic packet with raw tree margin scores, SHAP values, sensor loop current (4-20mA), RTU packet replay diagnostics, and SCADA gateway audit entries.
+                  </p>
+                  <div className="text-[10.5px] text-[#475569] pt-1">
+                    ✓ Designed for instrument engineers, data science audits, and CPCB technical committees.
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#64748b] hover:bg-[#f2f4f6]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Confirmation Modal before Final Submit */}
         {showSubmitConfirm && (
           <div className="absolute inset-0 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4 z-50">
@@ -1218,7 +1512,7 @@ export function InspectionReportModal({
                 <span>Confirm Final Report Submission</span>
               </div>
               <p className="text-xs text-[#42474f] leading-relaxed">
-                Submitting this report will lock it from direct modifications and forward it to the administrator for compliance review. Are you sure you are ready to submit?
+                Submitting this report will lock it from direct modifications and forward it to the senior administrator for compliance review. Are you sure you are ready to submit?
               </p>
               <div className="flex justify-end gap-2 pt-2">
                 <button

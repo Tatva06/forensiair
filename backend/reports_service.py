@@ -88,6 +88,16 @@ def init_reports_tables():
             CREATE INDEX IF NOT EXISTS idx_revisions_report_id ON report_revisions(report_id);
         """)
 
+        # Safe non-destructive column migrations for existing databases
+        for col_name, col_type in [
+            ("ai_confirmation", "TEXT"),
+            ("ai_prediction_snapshot", "TEXT")
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE inspection_reports ADD COLUMN {col_name} {col_type};")
+            except Exception:
+                pass  # Column already exists
+
         conn.commit()
     finally:
         conn.close()
@@ -198,7 +208,9 @@ def create_report(
     other_checks_description: Optional[str] = None,
     evidence_references: Optional[Dict[str, Any]] = None,
     case_id: Optional[str] = None,
-    status: str = "Draft"
+    status: str = "Draft",
+    ai_confirmation: Optional[str] = None,
+    ai_prediction_snapshot: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Creates a new inspection verification report in the database and logs revision #1.
@@ -213,6 +225,7 @@ def create_report(
 
     checks_json = json.dumps(checks_performed)
     evidence_json = json.dumps(evidence_references or {})
+    pred_json = json.dumps(ai_prediction_snapshot) if ai_prediction_snapshot else None
 
     conn = get_db_connection()
     try:
@@ -221,13 +234,15 @@ def create_report(
                 report_id, alert_id, factory_id, factory_name, case_id,
                 inspector_id, inspector_name, inspection_date, checks_performed,
                 other_checks_description, findings, outcome, evidence_references,
-                status, created_at, updated_at, submitted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, created_at, updated_at, submitted_at,
+                ai_confirmation, ai_prediction_snapshot
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             report_id, str(alert_info["alert_id"]), alert_info["factory_id"], alert_info["factory_name"],
             case_id, inspector_id, inspector_name or inspector_id, inspection_date,
             checks_json, other_checks_description, findings, outcome,
-            evidence_json, status, now_iso, now_iso, submitted_at
+            evidence_json, status, now_iso, now_iso, submitted_at,
+            ai_confirmation, pred_json
         ))
 
         # Log Initial Revision
@@ -267,7 +282,9 @@ def update_report(
     other_checks_description: Optional[str] = None,
     evidence_references: Optional[Dict[str, Any]] = None,
     case_id: Optional[str] = None,
-    actor_id: Optional[str] = None
+    actor_id: Optional[str] = None,
+    ai_confirmation: Optional[str] = None,
+    ai_prediction_snapshot: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Updates an existing report draft. Prevents silent overwrite of submitted or reviewed reports.
@@ -293,6 +310,8 @@ def update_report(
         new_other = other_checks_description if other_checks_description is not None else existing["other_checks_description"]
         new_evidence = json.dumps(evidence_references) if evidence_references is not None else json.dumps(existing["evidence_references"])
         new_case_id = case_id if case_id is not None else existing["case_id"]
+        new_ai_conf = ai_confirmation if ai_confirmation is not None else existing.get("ai_confirmation")
+        new_pred = json.dumps(ai_prediction_snapshot) if ai_prediction_snapshot is not None else (json.dumps(existing["ai_prediction_snapshot"]) if existing.get("ai_prediction_snapshot") else None)
 
         conn.execute("""
             UPDATE inspection_reports SET
@@ -303,11 +322,14 @@ def update_report(
                 other_checks_description = ?,
                 evidence_references = ?,
                 case_id = ?,
+                ai_confirmation = ?,
+                ai_prediction_snapshot = ?,
                 updated_at = ?
             WHERE report_id = ?
         """, (
             new_date, new_checks, new_findings, new_outcome,
-            new_other, new_evidence, new_case_id, now_iso, report_id
+            new_other, new_evidence, new_case_id,
+            new_ai_conf, new_pred, now_iso, report_id
         ))
 
         # Log Revision
@@ -514,6 +536,8 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "submitted_at": row["submitted_at"],
+            "ai_confirmation": row["ai_confirmation"] if "ai_confirmation" in row.keys() else None,
+            "ai_prediction_snapshot": json.loads(row["ai_prediction_snapshot"]) if "ai_prediction_snapshot" in row.keys() and row["ai_prediction_snapshot"] else None,
             "revisions": revisions,
             "linked_alert": alert_info
         }
@@ -570,6 +594,8 @@ def list_reports(
                 "outcome": row["outcome"],
                 "evidence_references": json.loads(row["evidence_references"]) if row["evidence_references"] else {},
                 "status": row["status"],
+                "ai_confirmation": row["ai_confirmation"] if "ai_confirmation" in row.keys() else None,
+                "ai_prediction_snapshot": json.loads(row["ai_prediction_snapshot"]) if "ai_prediction_snapshot" in row.keys() and row["ai_prediction_snapshot"] else None,
                 "admin_notes": row["admin_notes"],
                 "admin_decision": row["admin_decision"],
                 "reviewed_by": row["reviewed_by"],

@@ -11,20 +11,29 @@ import {
   Search,
   ChevronRight,
   User,
-  Calendar,
-  Building2,
   RefreshCw,
-  Paperclip
+  Paperclip,
+  X
 } from 'lucide-react';
 import { apiFetch } from '../config';
+import { useViewMode } from '../context/ViewModeContext';
 import { InspectionReportModal } from './InspectionReportModal';
-import { exportReportToPrint } from '../utils/reportExport';
+import {
+  getOutcomeLabel,
+  getReportStatusLabel,
+  getAiConfirmationLabel
+} from '../utils/glossary';
+import {
+  exportOfficialOfficerBrief,
+  exportTechnicalDossier
+} from '../utils/reportExport';
 
 const REPORT_YEAR = new Date().getFullYear();
 
 export function ReportsCenterPage({ onNavigate, currentUser }) {
+  const { isSimple, isTechnical } = useViewMode();
   const [mainView, setMainView] = useState('verification_reports'); // 'verification_reports' or 'compliance_dossiers'
-  
+
   // Verification Reports state
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
@@ -34,6 +43,7 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReportId, setSelectedReportId] = useState(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [exportTargetReport, setExportTargetReport] = useState(null);
 
   // Existing Dossiers state
   const [factories, setFactories] = useState([]);
@@ -103,12 +113,12 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
       const res = await apiFetch(`/api/reports/${r.report_id}`);
       if (res.ok) {
         const fullReport = await res.json();
-        exportReportToPrint(fullReport);
+        setExportTargetReport(fullReport);
       } else {
-        exportReportToPrint(r);
+        setExportTargetReport(r);
       }
     } catch (err) {
-      exportReportToPrint(r);
+      setExportTargetReport(r);
     }
   };
 
@@ -118,20 +128,28 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
   };
 
   // Filter verification reports
-  const filteredReports = reports.filter(r => {
+  const filteredReports = reports.filter((r) => {
     if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
     if (outcomeFilter !== 'ALL') {
       if (outcomeFilter === 'explained' && r.outcome !== 'explained') return false;
-      if (outcomeFilter === 'tampering' && (r.outcome !== 'referred' && r.outcome !== 'unexplained')) return false;
+      if (
+        outcomeFilter === 'tampering' &&
+        r.outcome !== 'referred' &&
+        r.outcome !== 'unexplained'
+      )
+        return false;
+      if (outcomeFilter === 'unexplained' && r.outcome !== 'unexplained') return false;
+      if (outcomeFilter === 'referred' && r.outcome !== 'referred') return false;
       if (outcomeFilter === 'inconclusive' && r.outcome !== 'inconclusive') return false;
     }
     if (districtFilter !== 'ALL') {
       const qDist = districtFilter.toLowerCase();
-      const matchDistrict = (r.factory_name || '').toLowerCase().includes(qDist) ||
-                            (r.factory_id || '').toLowerCase().includes(qDist) ||
-                            factories.find(f => f.factory_id === r.factory_id)?.location?.toLowerCase()?.includes(qDist) ||
-                            factories.find(f => f.factory_id === r.factory_id)?.district?.toLowerCase()?.includes(qDist) ||
-                            factories.find(f => f.factory_id === r.factory_id)?.region?.toLowerCase()?.includes(qDist);
+      const matchDistrict =
+        (r.factory_name || '').toLowerCase().includes(qDist) ||
+        (r.factory_id || '').toLowerCase().includes(qDist) ||
+        factories.find((f) => f.factory_id === r.factory_id)?.location?.toLowerCase()?.includes(qDist) ||
+        factories.find((f) => f.factory_id === r.factory_id)?.district?.toLowerCase()?.includes(qDist) ||
+        factories.find((f) => f.factory_id === r.factory_id)?.region?.toLowerCase()?.includes(qDist);
       if (!matchDistrict) return false;
     }
     if (searchQuery.trim()) {
@@ -148,12 +166,14 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
 
   // KPI Metrics by Verification Outcome
   const totalReportsCount = reports.length;
-  const tamperingCount = reports.filter(r => r.outcome === 'referred' || r.outcome === 'unexplained').length;
-  const falsePositivesCount = reports.filter(r => r.outcome === 'explained').length;
-  const inconclusiveCount = reports.filter(r => r.outcome === 'inconclusive').length;
+  const severeOrUnexplainedCount = reports.filter(
+    (r) => r.outcome === 'referred' || r.outcome === 'unexplained'
+  ).length;
+  const normalExplainedCount = reports.filter((r) => r.outcome === 'explained').length;
+  const inconclusiveCount = reports.filter((r) => r.outcome === 'inconclusive').length;
 
   // Filter factories for dossier view
-  const filteredFactories = factories.filter(f => {
+  const filteredFactories = factories.filter((f) => {
     if (filterTag === 'Critical') return f.risk_tier === 'High';
     if (filterTag === 'Routine') return f.risk_tier === 'Low' || f.risk_tier === 'Medium';
     return true;
@@ -165,15 +185,17 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
   const regionStr = activeFac.region || activeFac.district || 'Taloja';
   const licenseNo = activeFac.consent_number || 'Not available';
 
-  const tamperProbVal = activeFac.tamper_probability !== undefined
-    ? `${activeFac.tamper_probability.toFixed(1)}%`
-    : 'Not available';
+  const tamperProbVal =
+    activeFac.tamper_probability !== undefined
+      ? `${activeFac.tamper_probability.toFixed(1)}%`
+      : 'Not available';
 
-  const anomalyScoreVal = activeFac.raw_fingerprint_signals?.anomaly_score !== undefined
-    ? activeFac.raw_fingerprint_signals.anomaly_score.toFixed(2)
-    : activeFac.anomaly_score !== undefined
-    ? activeFac.anomaly_score.toFixed(2)
-    : 'Not available';
+  const anomalyScoreVal =
+    activeFac.raw_fingerprint_signals?.anomaly_score !== undefined
+      ? activeFac.raw_fingerprint_signals.anomaly_score.toFixed(2)
+      : activeFac.anomaly_score !== undefined
+      ? activeFac.anomaly_score.toFixed(2)
+      : 'Not available';
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-6">
@@ -182,10 +204,12 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
         <div>
           <h1 className="text-headline-lg font-headline-lg text-[#00355f] flex items-center gap-2">
             <FileText size={28} />
-            <span>Reports & Compliance Verification Center</span>
+            <span>Reports &amp; Compliance Verification Center</span>
           </h1>
           <p className="text-body-sm text-[#727780] mt-1">
-            Database-backed inspector verification dossiers, on-site findings documentation & compliance summaries.
+            {isSimple
+              ? 'Official on-site inspector findings, verified equipment explanations, and authorized regulatory decisions.'
+              : 'Continuous telemetry ground truth repository correlating physical audits with ML tampering fingerprints.'}
           </p>
         </div>
 
@@ -200,10 +224,14 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
             }`}
           >
             <ShieldCheck size={16} />
-            <span>Inspector Verification Reports</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-              mainView === 'verification_reports' ? 'bg-white/20 text-white' : 'bg-[#f2f4f6] text-[#727780]'
-            }`}>
+            <span>{isSimple ? 'Verification Reports' : 'Field Inspection Dossiers'}</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] ${
+                mainView === 'verification_reports'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-[#f2f4f6] text-[#727780]'
+              }`}
+            >
               {totalReportsCount}
             </span>
           </button>
@@ -225,8 +253,9 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
       {/* VIEW 1: INSPECTOR VERIFICATION REPORTS */}
       {mainView === 'verification_reports' && (
         <div className="space-y-6">
-          {/* KPI Dashboard Summary */}
+          {/* KPI Dashboard Summary (Mode-Aware, No "False Alarm" or "Tampering Confirmed" auto-labeling) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Total Reports */}
             <div
               onClick={() => setOutcomeFilter('ALL')}
               className={`p-5 rounded-xl border cursor-pointer transition-all ${
@@ -236,13 +265,14 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               }`}
             >
               <div className="text-[10px] font-bold text-[#727780] uppercase tracking-wider flex items-center justify-between">
-                <span>Total Verification Reports</span>
+                <span>{isSimple ? 'Total Verification Reports' : 'Total Telemetry Dossiers'}</span>
                 <FileText size={16} className="text-[#00355f]" />
               </div>
               <div className="text-3xl font-bold font-mono text-[#00355f] mt-1">{totalReportsCount}</div>
               <p className="text-[11px] text-[#727780]">Taloja &amp; Mahad enforcement dossiers</p>
             </div>
 
+            {/* Card 2: Serious / Unexplained Issues */}
             <div
               onClick={() => setOutcomeFilter('tampering')}
               className={`p-5 rounded-xl border cursor-pointer transition-all ${
@@ -252,13 +282,16 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               }`}
             >
               <div className="text-[10px] font-bold text-[#D32F2F] uppercase tracking-wider flex items-center justify-between">
-                <span>Confirmed Tampering</span>
+                <span>{isSimple ? 'Serious / Unexplained Issues' : 'Unexplained / Referred'}</span>
                 <AlertTriangle size={16} className="text-[#D32F2F]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#D32F2F] mt-1">{tamperingCount}</div>
-              <p className="text-[11px] text-[#727780]">Closure notices &amp; guarantees seized</p>
+              <div className="text-3xl font-bold font-mono text-[#D32F2F] mt-1">{severeOrUnexplainedCount}</div>
+              <p className="text-[11px] text-[#727780]">
+                {isSimple ? 'Referred to senior officer / legal' : 'Regulatory audit & statutory directives'}
+              </p>
             </div>
 
+            {/* Card 3: Normal Explanation Found (No Violation) */}
             <div
               onClick={() => setOutcomeFilter('explained')}
               className={`p-5 rounded-xl border cursor-pointer transition-all ${
@@ -268,13 +301,16 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               }`}
             >
               <div className="text-[10px] font-bold text-[#1b6d24] uppercase tracking-wider flex items-center justify-between">
-                <span>False Positives (Verified)</span>
+                <span>{isSimple ? 'Normal Explanation Found' : 'Accounted Telemetry Anomaly'}</span>
                 <CheckCircle2 size={16} className="text-[#1b6d24]" />
               </div>
-              <div className="text-3xl font-bold font-mono text-[#1b6d24] mt-1">{falsePositivesCount}</div>
-              <p className="text-[11px] text-[#727780]">Sensor faults &amp; scheduled overhauls</p>
+              <div className="text-3xl font-bold font-mono text-[#1b6d24] mt-1">{normalExplainedCount}</div>
+              <p className="text-[11px] text-[#727780]">
+                {isSimple ? 'Sensor wash & verified maintenance' : 'Verified sensor wash & overhaul logs'}
+              </p>
             </div>
 
+            {/* Card 4: Lab / Calibration Pending */}
             <div
               onClick={() => setOutcomeFilter('inconclusive')}
               className={`p-5 rounded-xl border cursor-pointer transition-all ${
@@ -284,11 +320,13 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               }`}
             >
               <div className="text-[10px] font-bold text-[#F57C00] uppercase tracking-wider flex items-center justify-between">
-                <span>Lab Results Pending</span>
+                <span>{isSimple ? 'Proof / Lab Tests Needed' : 'Inconclusive Correlation'}</span>
                 <Clock size={16} className="text-[#F57C00]" />
               </div>
               <div className="text-3xl font-bold font-mono text-[#F57C00] mt-1">{inconclusiveCount}</div>
-              <p className="text-[11px] text-[#727780]">5-Day BOD incubation at Central Lab</p>
+              <p className="text-[11px] text-[#727780]">
+                {isSimple ? 'Grab samples undergoing laboratory test' : '5-Day BOD incubation / loop check'}
+              </p>
             </div>
           </div>
 
@@ -308,16 +346,28 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
 
               {/* Outcome / Finding Filter */}
               <div className="flex items-center gap-1.5 text-xs">
-                <span className="font-bold text-[#727780]">Outcome:</span>
+                <span className="font-bold text-[#727780]">Finding:</span>
                 <select
                   value={outcomeFilter}
                   onChange={(e) => setOutcomeFilter(e.target.value)}
                   className="bg-[#f8f9fb] border border-[#E5E7EB] rounded px-2.5 py-1.5 font-bold text-[#00355f] focus:outline-none"
                 >
                   <option value="ALL">All Outcomes</option>
-                  <option value="explained">False Positives (Explained)</option>
-                  <option value="tampering">Confirmed Tampering</option>
-                  <option value="inconclusive">Inconclusive (Lab Pending)</option>
+                  <option value="explained">
+                    {isSimple ? 'Normal explanation found, no violation' : 'Accounted by maintenance/wash'}
+                  </option>
+                  <option value="tampering">
+                    {isSimple ? 'Serious issue / Unexplained' : 'Unexplained / Referred'}
+                  </option>
+                  <option value="unexplained">
+                    {isSimple ? 'Factory could not explain the problem' : 'Unexplained variance'}
+                  </option>
+                  <option value="referred">
+                    {isSimple ? 'Referred to senior officer / legal' : 'Referred for compliance audit'}
+                  </option>
+                  <option value="inconclusive">
+                    {isSimple ? 'Not enough proof yet, re-inspection needed' : 'Inconclusive correlation'}
+                  </option>
                 </select>
               </div>
 
@@ -337,16 +387,25 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
 
               {/* Status Filter */}
               <div className="flex items-center gap-1.5 text-xs">
-                <span className="font-bold text-[#727780]">Status:</span>
+                <span className="font-bold text-[#727780]">Review Status:</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="bg-[#f8f9fb] border border-[#E5E7EB] rounded px-2.5 py-1.5 font-bold text-[#00355f] focus:outline-none"
                 >
                   <option value="ALL">All Statuses</option>
-                  <option value="Reviewed">Reviewed &amp; Finalized</option>
-                  <option value="Submitted for Review">Submitted for Review</option>
-                  <option value="Draft">Drafts</option>
+                  <option value="Reviewed">
+                    {getReportStatusLabel('Reviewed', isSimple).label}
+                  </option>
+                  <option value="Submitted for Review">
+                    {getReportStatusLabel('Submitted for Review', isSimple).label}
+                  </option>
+                  <option value="Draft">
+                    {getReportStatusLabel('Draft', isSimple).label}
+                  </option>
+                  <option value="Further Information Required">
+                    {getReportStatusLabel('Further Information Required', isSimple).label}
+                  </option>
                 </select>
               </div>
             </div>
@@ -387,24 +446,30 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                 <thead>
                   <tr className="bg-[#f8f9fb] border-b border-[#E5E7EB] text-[#727780] font-bold uppercase tracking-wider text-[10px]">
                     <th className="p-3.5">Report ID</th>
-                    <th className="p-3.5">Facility & Linked Alert</th>
+                    <th className="p-3.5">Facility &amp; Scope</th>
                     <th className="p-3.5">Inspection Date</th>
                     <th className="p-3.5">Inspector</th>
-                    <th className="p-3.5">Outcome</th>
+                    <th className="p-3.5">AI Feedback</th>
+                    <th className="p-3.5">Ground Outcome</th>
                     <th className="p-3.5">Status</th>
                     <th className="p-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB]">
                   {filteredReports.map((r) => {
-                    const isFalsePositive = r.outcome === 'explained';
-                    const isTampering = r.outcome === 'referred' || r.outcome === 'unexplained';
-                    const isInconclusive = r.outcome === 'inconclusive';
+                    const outcomeInfo = getOutcomeLabel(r.outcome, isSimple);
+                    const statusInfo = getReportStatusLabel(r.status, isSimple);
+                    const aiConfInfo = getAiConfirmationLabel(r.ai_confirmation, isSimple);
 
                     // Derive Taloja or Mahad region
-                    const facObj = factories.find(f => f.factory_id === r.factory_id);
-                    const region = facObj?.region || facObj?.district || facObj?.location ||
-                                   (r.factory_name?.toLowerCase().includes('mahad') || r.report_id?.includes('MHD') ? 'Mahad' : 'Taloja');
+                    const facObj = factories.find((f) => f.factory_id === r.factory_id);
+                    const region =
+                      facObj?.region ||
+                      facObj?.district ||
+                      facObj?.location ||
+                      (r.factory_name?.toLowerCase().includes('mahad') || r.report_id?.includes('MHD')
+                        ? 'Mahad'
+                        : 'Taloja');
 
                     const attCount = r.evidence_references?.attachments?.length || 0;
 
@@ -426,11 +491,13 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                         <td className="p-3.5">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-[#191c1e]">{r.factory_name || r.factory_id}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              region.toLowerCase().includes('mahad')
-                                ? 'bg-[#7c3aed]/10 text-[#7c3aed] border border-[#7c3aed]/20'
-                                : 'bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20'
-                            }`}>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                region.toLowerCase().includes('mahad')
+                                  ? 'bg-[#7c3aed]/10 text-[#7c3aed] border border-[#7c3aed]/20'
+                                  : 'bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20'
+                              }`}
+                            >
                               {region}
                             </span>
                           </div>
@@ -443,29 +510,29 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                           {r.inspection_date}
                         </td>
                         <td className="p-3.5">
-                          <div className="font-medium text-[#191c1e] text-[11px]">{r.inspector_name || r.inspector_id}</div>
+                          <div className="font-medium text-[#191c1e] text-[11px]">
+                            {r.inspector_name || r.inspector_id}
+                          </div>
                           <div className="text-[10px] text-[#727780]">SPCB Enforcement Officer</div>
                         </td>
                         <td className="p-3.5">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                            isFalsePositive
-                              ? 'bg-[#e8f5e9] text-[#1b6d24] border-[#1b6d24]/30'
-                              : isTampering
-                              ? 'bg-[#fdecec] text-[#D32F2F] border-[#D32F2F]/30'
-                              : 'bg-[#fff3e6] text-[#F57C00] border-[#F57C00]/30'
-                          }`}>
-                            {isFalsePositive && '✓ False Positive'}
-                            {isTampering && '⚠️ Tampering Confirmed'}
-                            {isInconclusive && '⏳ Lab Result Pending'}
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-semibold border ${aiConfInfo.badge}`}
+                          >
+                            {aiConfInfo.label}
+                          </span>
+                        </td>
+                        <td className="p-3.5 max-w-[220px]">
+                          <span
+                            className={`inline-block px-2.5 py-1 rounded-full text-[10.5px] font-bold border leading-tight ${outcomeInfo.badge}`}
+                            title={outcomeInfo.description}
+                          >
+                            {outcomeInfo.label}
                           </span>
                         </td>
                         <td className="p-3.5">
-                          <span className={`badge-status ${
-                            r.status === 'Reviewed' ? 'badge-status-reviewed' :
-                            r.status === 'Submitted for Review' ? 'badge-status-submitted' :
-                            'badge-status-draft'
-                          }`}>
-                            {r.status}
+                          <span className={`badge-status ${statusInfo.badge}`}>
+                            {statusInfo.label}
                           </span>
                         </td>
                         <td className="p-3.5 text-right">
@@ -481,7 +548,7 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                               onClick={() => handleOpenReport(r.report_id)}
                               className="px-3 py-1 bg-white border border-[#00355f] text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#e7f0f8] transition-colors"
                             >
-                              Open & Review
+                              Open &amp; Review
                             </button>
                           </div>
                         </td>
@@ -495,7 +562,7 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
         </div>
       )}
 
-      {/* VIEW 2: FACILITY COMPLIANCE DOSSIERS (THE PRESERVED VIEW) */}
+      {/* VIEW 2: FACILITY COMPLIANCE DOSSIERS (PRESERVED VIEW) */}
       {mainView === 'compliance_dossiers' && (
         <div className="flex flex-col md:h-[calc(100vh-180px)] md:flex-row md:overflow-hidden print:h-auto print:block">
           {/* Left Sidebar: Report Archive List (1/3) */}
@@ -509,13 +576,13 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {['All', 'Critical', 'Routine'].map(tag => (
+                {['All', 'Critical', 'Routine'].map((tag) => (
                   <button
                     key={tag}
                     onClick={() => setFilterTag(tag)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      filterTag === tag 
-                        ? 'bg-[#00355f] text-white font-bold' 
+                      filterTag === tag
+                        ? 'bg-[#00355f] text-white font-bold'
                         : 'bg-white text-[#727780] border border-[#E5E7EB] hover:border-[#00355f]'
                     }`}
                   >
@@ -532,22 +599,34 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                 const itemMed = fItem.risk_tier === 'Medium';
 
                 return (
-                  <div 
+                  <div
                     key={fItem.factory_id}
                     onClick={() => fetchFactoryReport(fItem)}
                     className={`p-4 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-white border-l-4 border-[#00355f]' : 'hover:bg-white border-l-4 border-transparent'
+                      isSelected
+                        ? 'bg-white border-l-4 border-[#00355f]'
+                        : 'hover:bg-white border-l-4 border-transparent'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-1">
-                      <span className="text-[10px] font-bold text-[#727780] uppercase">FR-{REPORT_YEAR}-#{fItem.factory_id}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                        itemHigh ? 'bg-[#D32F2F]/10 text-[#D32F2F]' : itemMed ? 'bg-[#F57C00]/10 text-[#F57C00]' : 'bg-[#1b6d24]/10 text-[#1b6d24]'
-                      }`}>
+                      <span className="text-[10px] font-bold text-[#727780] uppercase">
+                        FR-{REPORT_YEAR}-#{fItem.factory_id}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                          itemHigh
+                            ? 'bg-[#D32F2F]/10 text-[#D32F2F]'
+                            : itemMed
+                            ? 'bg-[#F57C00]/10 text-[#F57C00]'
+                            : 'bg-[#1b6d24]/10 text-[#1b6d24]'
+                        }`}
+                      >
                         {fItem.risk_tier || 'ROUTINE'}
                       </span>
                     </div>
-                    <h3 className="font-body-md font-bold text-[#00355f] mb-1">{fItem.factory_name || fItem.name}</h3>
+                    <h3 className="font-body-md font-bold text-[#00355f] mb-1">
+                      {fItem.factory_name || fItem.name}
+                    </h3>
                     <div className="text-xs text-[#727780]">
                       {fItem.region || fItem.district || 'Not available'}
                     </div>
@@ -562,60 +641,113 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
             <div className="max-w-3xl mx-auto w-full bg-white border border-[#E5E7EB] rounded-xl p-8 shadow-md space-y-6 print:max-w-full print:border-none print:shadow-none print:rounded-none">
               <div className="flex justify-between items-start border-b border-[#E5E7EB] pb-6">
                 <div>
-                  <span className="text-[10px] font-label-caps text-[#727780] uppercase">OFFICIAL COMPLIANCE DOSSIER</span>
-                  <h1 className="text-headline-lg font-headline-lg text-[#00355f] mt-1">{activeFac.factory_name || activeFac.name}</h1>
-                  <p className="text-body-sm text-[#42474f]">District: {regionStr} | License: #{licenseNo}</p>
+                  <span className="text-[10px] font-label-caps text-[#727780] uppercase">
+                    OFFICIAL COMPLIANCE DOSSIER
+                  </span>
+                  <h1 className="text-headline-lg font-headline-lg text-[#00355f] mt-1">
+                    {activeFac.factory_name || activeFac.name}
+                  </h1>
+                  <p className="text-body-sm text-[#42474f]">
+                    District: {regionStr} | License: #{licenseNo}
+                  </p>
                 </div>
-                <button onClick={() => window.print()} className="bg-[#00355f] text-white px-5 py-2 rounded-lg font-bold text-body-sm flex items-center gap-2 hover:opacity-90 shadow-xs print:hidden">
+                <button
+                  onClick={() => window.print()}
+                  className="bg-[#00355f] text-white px-5 py-2 rounded-lg font-bold text-body-sm flex items-center gap-2 hover:opacity-90 shadow-xs print:hidden"
+                >
                   <Download size={16} /> Download PDF
                 </button>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-[#f8f9fb] rounded-lg border border-[#E5E7EB]">
-                  <div className="text-[10px] font-label-caps text-[#727780] uppercase font-bold">TAMPER PROBABILITY</div>
-                  <div className={`text-display-kpi text-display-kpi mt-1 ${isHigh ? 'text-[#D32F2F]' : isMedium ? 'text-[#F57C00]' : 'text-[#1b6d24]'}`}>
+                  <div className="text-[10px] font-label-caps text-[#727780] uppercase font-bold">
+                    TAMPER PROBABILITY
+                  </div>
+                  <div
+                    className={`text-display-kpi text-display-kpi mt-1 ${
+                      isHigh ? 'text-[#D32F2F]' : isMedium ? 'text-[#F57C00]' : 'text-[#1b6d24]'
+                    }`}
+                  >
                     {tamperProbVal}
                   </div>
                 </div>
                 <div className="p-4 bg-[#f8f9fb] rounded-lg border border-[#E5E7EB]">
-                  <div className="text-[10px] font-label-caps text-[#727780] uppercase font-bold">ANOMALY SCORE</div>
-                  <div className={`text-display-kpi text-display-kpi mt-1 ${isHigh ? 'text-[#D32F2F]' : isMedium ? 'text-[#F57C00]' : 'text-[#1b6d24]'}`}>
+                  <div className="text-[10px] font-label-caps text-[#727780] uppercase font-bold">
+                    ANOMALY SCORE
+                  </div>
+                  <div
+                    className={`text-display-kpi text-display-kpi mt-1 ${
+                      isHigh ? 'text-[#D32F2F]' : isMedium ? 'text-[#F57C00]' : 'text-[#1b6d24]'
+                    }`}
+                  >
                     {anomalyScoreVal}
                   </div>
                 </div>
               </div>
 
               <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
-                <h3 className="font-headline-md text-headline-md text-[#00355f]">Executive Summary & Evidence</h3>
+                <h3 className="font-headline-md text-headline-md text-[#00355f]">
+                  Executive Summary &amp; Evidence
+                </h3>
                 <p className="text-body-sm text-[#42474f] leading-relaxed">
-                  Forensic AI evaluation of real-time telemetry from <strong className="text-[#191c1e]">{activeFac.factory_name || activeFac.name}</strong> ({regionStr}) revealed TSI risk score of <strong className="text-[#191c1e]">{activeFac.tsi_score !== undefined ? `${activeFac.tsi_score.toFixed(1)} / 100` : 'Not available'}</strong>. {activeFac.note ? `${activeFac.note} ` : ''}Automated compliance audit report compiled for inspector review.
+                  Forensic AI evaluation of real-time telemetry from{' '}
+                  <strong className="text-[#191c1e]">{activeFac.factory_name || activeFac.name}</strong>{' '}
+                  ({regionStr}) revealed TSI risk score of{' '}
+                  <strong className="text-[#191c1e]">
+                    {activeFac.tsi_score !== undefined
+                      ? `${activeFac.tsi_score.toFixed(1)} / 100`
+                      : 'Not available'}
+                  </strong>
+                  . {activeFac.note ? `${activeFac.note} ` : ''}Automated compliance audit report compiled
+                  for inspector review.
                 </p>
               </div>
 
               {/* Composite Score Breakdown */}
               <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
-                <h3 className="font-headline-md text-headline-md text-[#00355f]">Composite Risk Score Breakdown</h3>
+                <h3 className="font-headline-md text-headline-md text-[#00355f]">
+                  Composite Risk Score Breakdown
+                </h3>
                 {!explanation?.composite_breakdown ? (
                   <p className="text-body-sm text-[#727780]">Composite breakdown not available for this factory.</p>
                 ) : (
                   <table className="w-full text-body-sm">
                     <tbody>
                       <tr className="border-b border-[#E5E7EB]">
-                        <td className="py-1.5 text-[#42474f]">Fingerprint Checks ({(explanation.composite_breakdown.fingerprints.weight * 100).toFixed(1)}% weight, {explanation.composite_breakdown.fingerprints.triggered_count}/{explanation.composite_breakdown.fingerprints.total_checks} triggered)</td>
-                        <td className="py-1.5 text-right font-bold text-[#191c1e]">{explanation.composite_breakdown.fingerprints.contribution}</td>
+                        <td className="py-1.5 text-[#42474f]">
+                          Fingerprint Checks (
+                          {(explanation.composite_breakdown.fingerprints.weight * 100).toFixed(1)}% weight,{' '}
+                          {explanation.composite_breakdown.fingerprints.triggered_count}/
+                          {explanation.composite_breakdown.fingerprints.total_checks} triggered)
+                        </td>
+                        <td className="py-1.5 text-right font-bold text-[#191c1e]">
+                          {explanation.composite_breakdown.fingerprints.contribution}
+                        </td>
                       </tr>
                       <tr className="border-b border-[#E5E7EB]">
-                        <td className="py-1.5 text-[#42474f]">Isolation Forest ({(explanation.composite_breakdown.isolation_forest.weight * 100).toFixed(1)}% weight)</td>
-                        <td className="py-1.5 text-right font-bold text-[#191c1e]">{explanation.composite_breakdown.isolation_forest.contribution}</td>
+                        <td className="py-1.5 text-[#42474f]">
+                          Isolation Forest (
+                          {(explanation.composite_breakdown.isolation_forest.weight * 100).toFixed(1)}% weight)
+                        </td>
+                        <td className="py-1.5 text-right font-bold text-[#191c1e]">
+                          {explanation.composite_breakdown.isolation_forest.contribution}
+                        </td>
                       </tr>
                       <tr className="border-b border-[#E5E7EB]">
-                        <td className="py-1.5 text-[#42474f]">Factory-Level Tamper Model ({(explanation.composite_breakdown.tamper_model.weight * 100).toFixed(1)}% weight)</td>
-                        <td className="py-1.5 text-right font-bold text-[#191c1e]">{explanation.composite_breakdown.tamper_model.contribution}</td>
+                        <td className="py-1.5 text-[#42474f]">
+                          Factory-Level Tamper Model (
+                          {(explanation.composite_breakdown.tamper_model.weight * 100).toFixed(1)}% weight)
+                        </td>
+                        <td className="py-1.5 text-right font-bold text-[#191c1e]">
+                          {explanation.composite_breakdown.tamper_model.contribution}
+                        </td>
                       </tr>
                       <tr>
                         <td className="py-1.5 font-bold text-[#00355f]">Total Risk Score</td>
-                        <td className="py-1.5 text-right font-bold text-[#00355f]">{explanation.composite_breakdown.total_risk_score}</td>
+                        <td className="py-1.5 text-right font-bold text-[#00355f]">
+                          {explanation.composite_breakdown.total_risk_score}
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -624,18 +756,26 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
 
               {/* Fingerprint Checks */}
               <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
-                <h3 className="font-headline-md text-headline-md text-[#00355f]">Fingerprint Check Detail</h3>
+                <h3 className="font-headline-md text-headline-md text-[#00355f]">
+                  Fingerprint Check Detail
+                </h3>
                 {!explanation?.fingerprint_checks?.length ? (
-                  <p className="text-body-sm text-[#727780]">Fingerprint check detail not available for this factory.</p>
+                  <p className="text-body-sm text-[#727780]">
+                    Fingerprint check detail not available for this factory.
+                  </p>
                 ) : (
                   <ul className="text-body-sm text-[#42474f] space-y-1">
                     {explanation.fingerprint_checks.map((chk) => (
                       <li key={chk.key} className="flex justify-between gap-4">
                         <span className={chk.triggered ? 'font-bold text-[#D32F2F]' : ''}>
-                          {chk.triggered ? '⚠ ' : '✓ '}{chk.label}
+                          {chk.triggered ? '⚠ ' : '✓ '}
+                          {chk.label}
                         </span>
                         <span className="text-xs text-[#727780]">
-                          {chk.raw_value === null ? 'Not available' : `value: ${chk.raw_value.toFixed(2)}${chk.unit}`} (trigger: {chk.threshold_desc})
+                          {chk.raw_value === null
+                            ? 'Not available'
+                            : `value: ${chk.raw_value.toFixed(2)}${chk.unit}`}{' '}
+                          (trigger: {chk.threshold_desc})
                         </span>
                       </li>
                     ))}
@@ -645,24 +785,49 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
 
               {/* SHAP Explanation Summary */}
               <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
-                <h3 className="font-headline-md text-headline-md text-[#00355f]">SHAP Feature Attribution</h3>
+                <h3 className="font-headline-md text-headline-md text-[#00355f]">
+                  SHAP Feature Attribution
+                </h3>
                 {!explanation?.shap ? (
-                  <p className="text-body-sm text-[#727780]">SHAP explanation not available for this factory.</p>
+                  <p className="text-body-sm text-[#727780]">
+                    SHAP explanation not available for this factory.
+                  </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-6 text-body-sm">
                     <div>
-                      <div className="text-xs font-bold text-[#727780] uppercase mb-1">Tamper Model (top drivers)</div>
+                      <div className="text-xs font-bold text-[#727780] uppercase mb-1">
+                        Tamper Model (top drivers)
+                      </div>
                       <ul className="space-y-0.5 text-[#42474f]">
                         {explanation.shap.tamper_model_shap?.features.slice(0, 3).map((f, idx) => (
-                          <li key={idx}>{f.label}: <strong className={f.shap_value_logit > 0 ? 'text-[#D32F2F]' : 'text-[#1b6d24]'}>{f.shap_value_logit > 0 ? '+' : ''}{f.shap_value_logit}</strong></li>
+                          <li key={idx}>
+                            {f.label}:{' '}
+                            <strong
+                              className={
+                                f.shap_value_logit > 0 ? 'text-[#D32F2F]' : 'text-[#1b6d24]'
+                              }
+                            >
+                              {f.shap_value_logit > 0 ? '+' : ''}
+                              {f.shap_value_logit}
+                            </strong>
+                          </li>
                         ))}
                       </ul>
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-[#727780] uppercase mb-1">Isolation Forest (top drivers)</div>
+                      <div className="text-xs font-bold text-[#727780] uppercase mb-1">
+                        Isolation Forest (top drivers)
+                      </div>
                       <ul className="space-y-0.5 text-[#42474f]">
                         {explanation.shap.isolation_forest_shap?.features.slice(0, 3).map((f, idx) => (
-                          <li key={idx}>{f.label}: <strong className={f.shap_value < 0 ? 'text-[#D32F2F]' : 'text-[#1b6d24]'}>{f.shap_value}</strong></li>
+                          <li key={idx}>
+                            {f.label}:{' '}
+                            <strong
+                              className={f.shap_value < 0 ? 'text-[#D32F2F]' : 'text-[#1b6d24]'}
+                            >
+                              {f.shap_value}
+                            </strong>
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -684,6 +849,86 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
           fetchVerificationReports();
         }}
       />
+
+      {/* EXPORT CHOICE MODAL FOR TABLE ACTION */}
+      {exportTargetReport && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[999]">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-[#cbd5e1] space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E5E7EB]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#00355f] text-white flex items-center justify-center">
+                  <Download size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-[#00355f]">
+                    Export {exportTargetReport.report_id}
+                  </h3>
+                  <p className="text-[11px] text-[#64748b]">Select document format to download / print</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setExportTargetReport(null)}
+                className="p-1 rounded text-[#94a3b8] hover:text-[#0f172a]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div
+                onClick={() => {
+                  const rep = exportTargetReport;
+                  setExportTargetReport(null);
+                  exportOfficialOfficerBrief(rep);
+                }}
+                className="p-4 rounded-xl border-2 border-[#00355f] bg-[#f0f7ff] hover:bg-[#e0efff] cursor-pointer transition-all space-y-1"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-[#00355f] uppercase tracking-wide">
+                    📄 Official Officer Brief (Recommended)
+                  </span>
+                  <span className="text-[10px] bg-[#00355f] text-white px-2 py-0.5 rounded font-bold">
+                    Official Brief
+                  </span>
+                </div>
+                <p className="text-xs text-[#334155] leading-relaxed">
+                  1-Page executive brief (Block 1: AI Finding Predicted / Block 2: Field Verification Observed / Block 3: Decision by Officer) + attached Technical Appendix.
+                </p>
+              </div>
+
+              <div
+                onClick={() => {
+                  const rep = exportTargetReport;
+                  setExportTargetReport(null);
+                  exportTechnicalDossier(rep);
+                }}
+                className="p-4 rounded-xl border border-[#cbd5e1] bg-white hover:bg-[#f8fafc] cursor-pointer transition-all space-y-1"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-[#0f172a] uppercase tracking-wide">
+                    🔬 Technical Dossier Export
+                  </span>
+                  <span className="text-[10px] bg-[#f1f5f9] text-[#475569] px-2 py-0.5 rounded font-bold">
+                    ML &amp; Diagnostics
+                  </span>
+                </div>
+                <p className="text-xs text-[#64748b] leading-relaxed">
+                  Comprehensive telemetry diagnostics, raw tree margin scores, SHAP values, RTU frame audit, and sensor loop logs.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setExportTargetReport(null)}
+                className="px-4 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#64748b] hover:bg-[#f2f4f6]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
