@@ -104,7 +104,7 @@ export function DatasetQualityPage({ onNavigate }) {
   const coverageByFactory = [...summaries]
     .sort((a, b) => (a.coverage_percentage || 0) - (b.coverage_percentage || 0))
     .slice(0, 8)
-    .map(s => ({ name: s.factory_name, pct: s.coverage_percentage }));
+    .map(s => ({ id: s.factory_id, name: s.factory_name, pct: s.coverage_percentage, grade: s.quality_grade }));
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8">
@@ -196,12 +196,28 @@ export function DatasetQualityPage({ onNavigate }) {
         <div className="lg:col-span-7 bg-white border border-[#E5E7EB] p-6 rounded-xl shadow-xs">
           <h3 className="font-headline-md text-headline-md text-[#00355f] mb-1">Lowest Coverage Facilities</h3>
           <p className="text-body-sm text-[#727780] mb-4">Bottom {coverageByFactory.length} of {summaries.length} facilities by real coverage_percentage.</p>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {coverageByFactory.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between text-body-sm font-semibold mb-1">
-                  <span className="text-[#191c1e]">{item.name}</span>
-                  <span className="text-[#00355f] font-bold">{item.pct?.toFixed(1)}%</span>
+              <div
+                key={idx}
+                onClick={() => onNavigate && item.id && onNavigate('factories', item.id)}
+                className="group cursor-pointer p-2.5 -mx-2.5 rounded-lg hover:bg-[#f8f9fb] transition-colors"
+                title={`Click to open Dossier for ${item.name}`}
+              >
+                <div className="flex justify-between text-body-sm font-semibold mb-1.5">
+                  <span className="text-[#191c1e] group-hover:text-[#00355f] group-hover:underline flex items-center gap-1.5">
+                    <span>{item.name}</span>
+                    <span className="text-[10px] text-[#727780] font-mono">({item.id})</span>
+                    <span className="text-xs text-[#00355f] opacity-0 group-hover:opacity-100 transition-opacity font-bold">→ View Dossier</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {item.grade && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">
+                        Grade {item.grade}
+                      </span>
+                    )}
+                    <span className="text-[#00355f] font-bold">{item.pct?.toFixed(1)}%</span>
+                  </div>
                 </div>
                 <div className="w-full h-2 bg-[#edeef0] rounded-full overflow-hidden">
                   <div
