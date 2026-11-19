@@ -1005,6 +1005,17 @@ class ReportReviewRequest(BaseModel):
     decision: str  # 'Reviewed' or 'Further Information Required'
     admin_notes: str
 
+class ReportAssignWindowRequest(BaseModel):
+    window_close_at: str
+    window_open_at: Optional[str] = None
+    assigned_by: Optional[str] = None
+
+class ReportRequestUnlockRequest(BaseModel):
+    reason: str
+
+class ReportGrantUnlockRequest(BaseModel):
+    unlock_duration_hours: Optional[int] = 24
+
 
 @app.get("/api/reports/alerts/status")
 def get_reports_alert_status():
@@ -1164,6 +1175,96 @@ def get_report_revisions(report_id: str):
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found.")
     return {"report_id": report_id, "revisions": report.get("revisions", [])}
+
+
+@app.get("/api/reports/unlock/requests")
+def get_pending_unlock_requests(user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)):
+    """Returns all pending officer unlock requests for administrator approval."""
+    return {"requests": reports_service.list_unlock_requests()}
+
+
+@app.post("/api/reports/{report_id}/assign-window")
+def assign_report_window(
+    report_id: str,
+    req: ReportAssignWindowRequest,
+    user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    """
+    Administrator sets the permitted edit time window for an inspection visit.
+    After window_close_at, report automatically locks.
+    """
+    if user and user.get("role") and user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only administrators can assign visit edit windows."
+        )
+    actor_id = user.get("sub") or user.get("username") if user else "administrator"
+    try:
+        report = reports_service.assign_window(
+            report_id=report_id,
+            window_close_at=req.window_close_at,
+            window_open_at=req.window_open_at,
+            assigned_by=req.assigned_by or actor_id,
+            actor_id=actor_id
+        )
+        return report
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to assign window: {str(e)}")
+
+
+@app.post("/api/reports/{report_id}/request-unlock")
+def request_report_unlock(
+    report_id: str,
+    req: ReportRequestUnlockRequest,
+    user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    """
+    Field inspector submits a request for administrator authorization to edit a locked report.
+    """
+    actor_id = user.get("sub") or user.get("username") if user else "inspector"
+    try:
+        report = reports_service.request_unlock(
+            report_id=report_id,
+            reason=req.reason,
+            actor_id=actor_id
+        )
+        return report
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to submit unlock request: {str(e)}")
+
+
+@app.post("/api/reports/{report_id}/grant-unlock")
+def grant_report_unlock(
+    report_id: str,
+    req: ReportGrantUnlockRequest,
+    user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)
+):
+    """
+    Administrator approves an inspector's unlock request, opening a timed editing window.
+    """
+    if user and user.get("role") and user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only administrators can authorize report unlocks."
+        )
+    admin_id = user.get("sub") or user.get("username") if user else "administrator"
+    try:
+        report = reports_service.grant_unlock(
+            report_id=report_id,
+            admin_id=admin_id,
+            unlock_duration_hours=req.unlock_duration_hours or 24
+        )
+        return report
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to grant unlock: {str(e)}")
 
 
 @app.get("/api/reports/{report_id}/export", response_class=HTMLResponse)

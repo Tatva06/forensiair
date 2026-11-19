@@ -30,6 +30,108 @@ import {
 
 const REPORT_YEAR = new Date().getFullYear();
 
+// Calm, easy-on-the-eyes formatters that avoid aggressive colored oval balloons
+function getCleanOutcomeDisplay(outcomeId) {
+  switch (outcomeId) {
+    case 'explained':
+      return {
+        title: 'Normal Operations',
+        detail: 'Routine maintenance, sensor wash, or process change',
+        dotClass: 'bg-[#16a34a]',
+        textClass: 'text-[#166534] font-bold'
+      };
+    case 'inconclusive':
+      return {
+        title: 'Inconclusive / Retest',
+        detail: 'Awaiting laboratory analysis or sensor calibration',
+        dotClass: 'bg-[#ea580c]',
+        textClass: 'text-[#9a3412] font-bold'
+      };
+    case 'unexplained':
+      return {
+        title: 'Unexplained Variance',
+        detail: 'Operational logs do not account for discrepancy',
+        dotClass: 'bg-[#dc2626]',
+        textClass: 'text-[#991b1b] font-bold'
+      };
+    case 'referred':
+      return {
+        title: 'Referred for Action',
+        detail: 'Flagged for regulatory taskforce compliance audit',
+        dotClass: 'bg-[#b91c1c]',
+        textClass: 'text-[#7f1d1d] font-bold'
+      };
+    default:
+      return {
+        title: outcomeId || 'Pending Inspection',
+        detail: 'Field ground findings pending documentation',
+        dotClass: 'bg-slate-400',
+        textClass: 'text-slate-700 font-semibold'
+      };
+  }
+}
+
+function getCleanAiFeedbackDisplay(aiConf) {
+  switch (aiConf) {
+    case 'confirmed':
+      return {
+        label: 'True Positive',
+        chipClass: 'bg-rose-50 text-rose-700 border-rose-200/80',
+        dotClass: 'bg-rose-500'
+      };
+    case 'partly_confirmed':
+      return {
+        label: 'Partially Confirmed',
+        chipClass: 'bg-amber-50 text-amber-700 border-amber-200/80',
+        dotClass: 'bg-amber-500'
+      };
+    case 'not_confirmed':
+      return {
+        label: 'False Positive',
+        chipClass: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+        dotClass: 'bg-emerald-500'
+      };
+    case 'different_issue':
+      return {
+        label: 'Off-target Issue',
+        chipClass: 'bg-sky-50 text-sky-700 border-sky-200/80',
+        dotClass: 'bg-sky-500'
+      };
+    default:
+      return {
+        label: 'Pending Validation',
+        chipClass: 'bg-slate-50 text-slate-600 border-slate-200',
+        dotClass: 'bg-slate-400'
+      };
+  }
+}
+
+function getCleanStatusDisplay(status) {
+  switch (status) {
+    case 'Reviewed':
+      return {
+        label: 'Reviewed & Finalized',
+        chipClass: 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
+      };
+    case 'Submitted for Review':
+      return {
+        label: 'Submitted for Review',
+        chipClass: 'bg-sky-50 text-sky-800 border-sky-200/80'
+      };
+    case 'Further Information Required':
+      return {
+        label: 'Further Info Required',
+        chipClass: 'bg-amber-50 text-amber-800 border-amber-200/80'
+      };
+    case 'Draft':
+    default:
+      return {
+        label: 'Draft Dossier',
+        chipClass: 'bg-slate-100 text-slate-700 border-slate-200/80'
+      };
+  }
+}
+
 export function ReportsCenterPage({ onNavigate, currentUser }) {
   const { isSimple, isTechnical } = useViewMode();
   const [mainView, setMainView] = useState('verification_reports'); // 'verification_reports' or 'compliance_dossiers'
@@ -441,25 +543,25 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
               <p>No reports match the selected criteria. Click "File Verification Report" to document on-site checks.</p>
             </div>
           ) : (
-            <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden shadow-xs">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-x-auto shadow-xs">
+              <table className="w-full text-left text-xs border-collapse min-w-[980px]">
                 <thead>
-                  <tr className="bg-[#f8f9fb] border-b border-[#E5E7EB] text-[#727780] font-bold uppercase tracking-wider text-[10px]">
-                    <th className="p-3.5">Report ID</th>
-                    <th className="p-3.5">Facility &amp; Scope</th>
-                    <th className="p-3.5">Inspection Date</th>
-                    <th className="p-3.5">Inspector</th>
-                    <th className="p-3.5">AI Feedback</th>
-                    <th className="p-3.5">Ground Outcome</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 text-right">Actions</th>
+                  <tr className="bg-[#f8f9fb] border-b border-[#E5E7EB] text-[#727780] font-semibold uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-4">Report ID</th>
+                    <th className="py-3 px-4">Facility &amp; Scope</th>
+                    <th className="py-3 px-4">Inspection Date</th>
+                    <th className="py-3 px-4">Inspector</th>
+                    <th className="py-3 px-4">AI Feedback</th>
+                    <th className="py-3 px-4">Ground Outcome</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB]">
                   {filteredReports.map((r) => {
-                    const outcomeInfo = getOutcomeLabel(r.outcome, isSimple);
-                    const statusInfo = getReportStatusLabel(r.status, isSimple);
-                    const aiConfInfo = getAiConfirmationLabel(r.ai_confirmation, isSimple);
+                    const cleanOutcome = getCleanOutcomeDisplay(r.outcome);
+                    const cleanAi = getCleanAiFeedbackDisplay(r.ai_confirmation);
+                    const cleanStatus = getCleanStatusDisplay(r.status);
 
                     // Derive Taloja or Mahad region
                     const facObj = factories.find((f) => f.factory_id === r.factory_id);
@@ -474,79 +576,98 @@ export function ReportsCenterPage({ onNavigate, currentUser }) {
                     const attCount = r.evidence_references?.attachments?.length || 0;
 
                     return (
-                      <tr key={r.report_id} className="hover:bg-[#fafbfc] transition-colors">
-                        <td className="p-3.5 font-mono font-bold text-[#00355f]">
-                          <div>{r.report_id}</div>
-                          {attCount > 0 && (
+                      <tr key={r.report_id} className="hover:bg-[#f8fafc] transition-colors">
+                        {/* Report ID */}
+                        <td className="py-3.5 px-4 whitespace-nowrap align-top font-mono">
+                          <div className="font-bold text-xs text-[#00355f] tracking-tight">{r.report_id}</div>
+                          {attCount > 0 ? (
                             <button
                               onClick={() => handleOpenReport(r.report_id)}
-                              className="inline-flex items-center gap-1 text-[10px] text-[#00355f] font-sans font-semibold mt-1 bg-[#e7f0f8] hover:bg-[#d5e7f6] px-1.5 py-0.5 rounded border border-[#00355f]/20 transition-colors"
+                              className="inline-flex items-center gap-1 text-[11px] text-[#727780] hover:text-[#00355f] font-sans font-medium mt-1 transition-colors"
                               title="Click to view photographic proofs in dossier"
                             >
-                              <Paperclip size={10} />
+                              <Paperclip size={11} className="text-[#00355f]" />
                               <span>{attCount} Proof{attCount > 1 ? 's' : ''} Attached</span>
                             </button>
+                          ) : (
+                            <span className="text-[10px] text-[#9ca3af] font-sans block mt-0.5">No attachments</span>
                           )}
                         </td>
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[#191c1e]">{r.factory_name || r.factory_id}</span>
+
+                        {/* Facility & Scope */}
+                        <td className="py-3.5 px-4 min-w-[200px] align-top">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs text-[#191c1e]">{r.factory_name || r.factory_id}</span>
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              className={`px-1.5 py-0.2 rounded text-[10px] font-semibold tracking-wider ${
                                 region.toLowerCase().includes('mahad')
-                                  ? 'bg-[#7c3aed]/10 text-[#7c3aed] border border-[#7c3aed]/20'
-                                  : 'bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20'
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200/60'
+                                  : 'bg-sky-50 text-sky-700 border border-sky-200/60'
                               }`}
                             >
                               {region}
                             </span>
                           </div>
-                          <div className="text-[11px] text-[#727780] font-mono mt-0.5 flex items-center gap-2">
+                          <div className="text-[11px] text-[#727780] font-mono mt-0.5 flex items-center gap-1.5">
                             <span>Alert #{r.alert_id}</span>
-                            {r.case_id && <span>• {r.case_id}</span>}
+                            {r.case_id && <span className="text-[#9ca3af]">• {r.case_id}</span>}
                           </div>
                         </td>
-                        <td className="p-3.5 text-[#42474f] font-mono text-[11px]">
+
+                        {/* Inspection Date */}
+                        <td className="py-3.5 px-4 whitespace-nowrap text-[#42474f] font-mono text-xs align-top">
                           {r.inspection_date}
                         </td>
-                        <td className="p-3.5">
-                          <div className="font-medium text-[#191c1e] text-[11px]">
+
+                        {/* Inspector */}
+                        <td className="py-3.5 px-4 whitespace-nowrap align-top">
+                          <div className="font-semibold text-xs text-[#191c1e]">
                             {r.inspector_name || r.inspector_id}
                           </div>
-                          <div className="text-[10px] text-[#727780]">SPCB Enforcement Officer</div>
+                          <div className="text-[11px] text-[#727780]">SPCB Enforcement Officer</div>
                         </td>
-                        <td className="p-3.5">
+
+                        {/* AI Feedback - Clean subtle chip with indicator dot, no aggressive oval balloon */}
+                        <td className="py-3.5 px-4 whitespace-nowrap align-top">
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-semibold border ${aiConfInfo.badge}`}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${cleanAi.chipClass}`}
                           >
-                            {aiConfInfo.label}
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cleanAi.dotClass}`} />
+                            <span>{cleanAi.label}</span>
                           </span>
                         </td>
-                        <td className="p-3.5 max-w-[220px]">
-                          <span
-                            className={`inline-block px-2.5 py-1 rounded-full text-[10.5px] font-bold border leading-tight ${outcomeInfo.badge}`}
-                            title={outcomeInfo.description}
-                          >
-                            {outcomeInfo.label}
+
+                        {/* Ground Outcome - Clean title + subtle detail, zero oval balloons */}
+                        <td className="py-3.5 px-4 min-w-[210px] max-w-[270px] align-top">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${cleanOutcome.dotClass}`} />
+                            <span className={`text-xs ${cleanOutcome.textClass}`}>{cleanOutcome.title}</span>
+                          </div>
+                          <p className="text-[11px] text-[#727780] mt-0.5 leading-snug">
+                            {cleanOutcome.detail}
+                          </p>
+                        </td>
+
+                        {/* Status - Soft calm pill */}
+                        <td className="py-3.5 px-4 whitespace-nowrap align-top">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border ${cleanStatus.chipClass}`}>
+                            {cleanStatus.label}
                           </span>
                         </td>
-                        <td className="p-3.5">
-                          <span className={`badge-status ${statusInfo.badge}`}>
-                            {statusInfo.label}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right">
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4 whitespace-nowrap text-right align-top">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleDownloadReportDirect(r)}
                               title="Download / Print Official PDF Report"
-                              className="p-1.5 bg-[#e7f0f8] border border-[#00355f]/30 text-[#00355f] rounded-lg text-xs hover:bg-[#d5e7f6] transition-colors"
+                              className="p-1.5 text-[#727780] hover:text-[#00355f] hover:bg-[#e7f0f8] rounded-lg transition-colors border border-transparent hover:border-[#00355f]/20"
                             >
-                              <Download size={13} />
+                              <Download size={14} />
                             </button>
                             <button
                               onClick={() => handleOpenReport(r.report_id)}
-                              className="px-3 py-1 bg-white border border-[#00355f] text-[#00355f] rounded-lg font-bold text-xs hover:bg-[#e7f0f8] transition-colors"
+                              className="px-3 py-1 bg-white border border-[#00355f] text-[#00355f] hover:bg-[#00355f] hover:text-white rounded-lg font-bold text-xs transition-colors shadow-2xs"
                             >
                               Open &amp; Review
                             </button>

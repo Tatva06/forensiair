@@ -17,7 +17,11 @@ import {
   Download,
   Printer,
   Eye,
-  Scale
+  Scale,
+  Lock,
+  Unlock,
+  Clock,
+  KeyRound
 } from 'lucide-react';
 import { apiFetch } from '../config';
 import { useViewMode } from '../context/ViewModeContext';
@@ -83,8 +87,27 @@ export function InspectionReportModal({
   const [selectedAlertMode, setSelectedAlertMode] = useState('routine'); // 'routine' or 'alert'
   const [selectedAlertId, setSelectedAlertId] = useState('');
 
+  // Window & Lock State
+  const [windowOpenAt, setWindowOpenAt] = useState(null);
+  const [windowCloseAt, setWindowCloseAt] = useState(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [unlockRequestedAt, setUnlockRequestedAt] = useState(null);
+  const [unlockRequestedReason, setUnlockRequestedReason] = useState('');
+  const [unlockExpiresAt, setUnlockExpiresAt] = useState(null);
+  const [unlockGrantedBy, setUnlockGrantedBy] = useState(null);
+
+  // Modals for Window & Unlock
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [unlockReasonInput, setUnlockReasonInput] = useState('');
+  const [submittingUnlockReq, setSubmittingUnlockReq] = useState(false);
+
+  const [showAssignWindowModal, setShowAssignWindowModal] = useState(false);
+  const [windowCloseInput, setWindowCloseInput] = useState('');
+  const [submittingWindowAssign, setSubmittingWindowAssign] = useState(false);
+
   const isAdmin = currentUser?.role === 'admin';
-  const isReadOnly = reportStatus === 'Submitted for Review' && !isAdmin;
+  const isTimeLocked = isLocked && !isAdmin;
+  const isReadOnly = (reportStatus === 'Submitted for Review' || isTimeLocked) && !isAdmin;
   const isReviewed = reportStatus === 'Reviewed';
 
   useEffect(() => {
@@ -119,6 +142,13 @@ export function InspectionReportModal({
     setLinkedAlert(null);
     setSelectedAlertMode('routine');
     setSelectedAlertId('');
+    setWindowOpenAt(null);
+    setWindowCloseAt(null);
+    setIsLocked(false);
+    setUnlockRequestedAt(null);
+    setUnlockRequestedReason('');
+    setUnlockExpiresAt(null);
+    setUnlockGrantedBy(null);
     setLoading(true);
 
     try {
@@ -216,6 +246,13 @@ export function InspectionReportModal({
     setAdminNotes(data.admin_notes || '');
     setAdminDecision(data.admin_decision || 'Reviewed');
     setRevisions(data.revisions || []);
+    setWindowOpenAt(data.window_open_at || null);
+    setWindowCloseAt(data.window_close_at || null);
+    setIsLocked(Boolean(data.is_locked));
+    setUnlockRequestedAt(data.unlock_requested_at || null);
+    setUnlockRequestedReason(data.unlock_requested_reason || '');
+    setUnlockExpiresAt(data.unlock_expires_at || null);
+    setUnlockGrantedBy(data.unlock_granted_by || null);
     if (data.linked_alert) {
       setLinkedAlert(data.linked_alert);
     }
@@ -491,6 +528,91 @@ export function InspectionReportModal({
     }
   };
 
+  const handleRequestUnlock = async () => {
+    if (!unlockReasonInput || unlockReasonInput.trim().length < 5) {
+      setErrorMsg('Please enter a valid reason for requesting report unlock (at least 5 characters).');
+      return;
+    }
+    setSubmittingUnlockReq(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch(`/api/reports/${currentReportId}/request-unlock`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: unlockReasonInput.trim() })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        populateReportData(data);
+        setShowUnlockModal(false);
+        setUnlockReasonInput('');
+        setSuccessMsg('Administrator unlock request submitted. Edits are locked until authorized.');
+        if (onReportSaved) onReportSaved(data);
+      } else {
+        setErrorMsg(data.detail || 'Failed to submit unlock request.');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Network error submitting unlock request.');
+    } finally {
+      setSubmittingUnlockReq(false);
+    }
+  };
+
+  const handleGrantUnlock = async (durationHours = 24) => {
+    if (!currentReportId) return;
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiFetch(`/api/reports/${currentReportId}/grant-unlock`, {
+        method: 'POST',
+        body: JSON.stringify({ unlock_duration_hours: durationHours })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        populateReportData(data);
+        setSuccessMsg(`Administrator edit unlock granted for ${durationHours} hours.`);
+        if (onReportSaved) onReportSaved(data);
+      } else {
+        setErrorMsg(data.detail || 'Failed to grant report unlock.');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Network error granting unlock.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssignWindow = async () => {
+    if (!windowCloseInput) {
+      setErrorMsg('Please select a valid inspection visit completion deadline.');
+      return;
+    }
+    setSubmittingWindowAssign(true);
+    setErrorMsg(null);
+    try {
+      const closeIso = new Date(windowCloseInput).toISOString();
+      const res = await apiFetch(`/api/reports/${currentReportId}/assign-window`, {
+        method: 'POST',
+        body: JSON.stringify({ window_close_at: closeIso })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        populateReportData(data);
+        setShowAssignWindowModal(false);
+        setSuccessMsg(`Visit window set. Report will auto-lock on ${new Date(closeIso).toLocaleString()}.`);
+        if (onReportSaved) onReportSaved(data);
+      } else {
+        setErrorMsg(data.detail || 'Failed to assign window.');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Network error assigning visit window.');
+    } finally {
+      setSubmittingWindowAssign(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const statusLabel = getReportStatusLabel(reportStatus, isSimple);
@@ -596,6 +718,151 @@ export function InspectionReportModal({
             <div className="p-3 bg-[#e8f5e9] border border-[#1b6d24]/30 rounded-lg text-xs text-[#1b6d24] flex items-center gap-2">
               <CheckCircle2 size={16} />
               <span>{successMsg}</span>
+            </div>
+          )}
+
+          {/* TIME-WINDOW & VISIT LOCK STATUS BANNER */}
+          {currentReportId && (
+            <div className="space-y-2">
+              {isLocked ? (
+                /* 1. REPORT IS LOCKED (visit cutoff has elapsed) */
+                <div className="p-4 bg-[#fff1f1] border border-[#ef4444]/40 rounded-xl space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#ef4444] text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Lock size={16} />
+                      </div>
+                      <div>
+                        <div className="font-bold text-[#b91c1c] text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <span>Inspection Visit Window Closed — Report Locked</span>
+                          <span className="bg-[#ef4444]/15 text-[#b91c1c] font-mono text-[10px] px-1.5 py-0.2 rounded font-bold">
+                            Chain of Custody Enforced
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#7f1d1d] mt-0.5">
+                          The allocated visit completion window closed on {windowCloseAt ? new Date(windowCloseAt).toLocaleString() : 'the visit cutoff'}. Direct additions or changes are locked.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!isAdmin && !unlockRequestedAt && (
+                        <button
+                          type="button"
+                          onClick={() => setShowUnlockModal(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00355f] text-white rounded-lg font-bold text-xs hover:bg-[#0f4c81] transition-colors shadow-xs"
+                        >
+                          <KeyRound size={13} />
+                          <span>Request Admin Unlock</span>
+                        </button>
+                      )}
+
+                      {isAdmin && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleGrantUnlock(24)}
+                            disabled={saving}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1b6d24] text-white rounded-lg font-bold text-xs hover:bg-[#14521b] transition-colors shadow-xs disabled:opacity-50"
+                          >
+                            <Unlock size={13} />
+                            <span>Authorize 24h Unlock</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowAssignWindowModal(true)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-[#E5E7EB] text-[#42474f] rounded-lg font-semibold text-xs hover:bg-[#edeef0] transition-colors"
+                          >
+                            <Clock size={13} />
+                            <span>Extend Deadline</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pending unlock notice if already requested */}
+                  {unlockRequestedAt && (
+                    <div className="mt-2 p-2.5 bg-white/90 border border-amber-300 rounded-lg text-[11px] text-[#7f1d1d] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={14} className="text-amber-600 animate-pulse shrink-0" />
+                        <span>
+                          <strong>Unlock Requested ({new Date(unlockRequestedAt).toLocaleString()}):</strong> "{unlockRequestedReason}"
+                        </span>
+                      </div>
+                      <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded text-[10px] border border-amber-200 shrink-0">
+                        Awaiting Admin Authorization
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : unlockExpiresAt ? (
+                /* 2. ADMIN OVERRIDE ACTIVE (unlock granted) */
+                <div className="p-3 bg-[#eefaf0] border border-[#1b6d24]/40 rounded-xl flex items-center justify-between text-xs text-[#14521b]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-md bg-[#1b6d24] text-white flex items-center justify-center shrink-0">
+                      <Unlock size={15} />
+                    </div>
+                    <div>
+                      <div className="font-bold text-[#1b6d24] flex items-center gap-1.5">
+                        <span>Admin Edit Override Active</span>
+                        <span className="text-[10px] bg-[#1b6d24]/10 px-1.5 py-0.2 rounded font-mono font-semibold">
+                          Authorized by {unlockGrantedBy || 'Administrator'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#2e7d32]">
+                        Editing permitted until <strong>{new Date(unlockExpiresAt).toLocaleString()}</strong>. All changes are recorded in the audit trail with a post-unlock stamp.
+                      </p>
+                    </div>
+                  </div>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignWindowModal(true)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-[#1b6d24] bg-white border border-[#1b6d24]/30 rounded-lg hover:bg-[#e8f5e9]"
+                    >
+                      Update Window
+                    </button>
+                  )}
+                </div>
+              ) : windowCloseAt ? (
+                /* 3. VISIT WINDOW ACTIVE */
+                <div className="p-2.5 bg-[#f0f7fc] border border-[#00355f]/20 rounded-xl flex items-center justify-between text-xs text-[#00355f]">
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} className="text-[#00355f] shrink-0" />
+                    <span>
+                      <strong>Inspection Visit Window Open:</strong> Edits permitted until <strong>{new Date(windowCloseAt).toLocaleString()}</strong>. Report will auto-lock thereafter.
+                    </span>
+                  </div>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignWindowModal(true)}
+                      className="px-2 py-0.5 text-[11px] font-bold text-[#00355f] bg-white border border-[#00355f]/30 rounded hover:bg-[#e7f0f8]"
+                    >
+                      Adjust Deadline
+                    </button>
+                  )}
+                </div>
+              ) : isAdmin ? (
+                /* 4. ADMIN CAN SET WINDOW */
+                <div className="p-2.5 bg-[#f8f9fb] border border-dashed border-[#E5E7EB] rounded-xl flex items-center justify-between text-xs text-[#727780]">
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={13} />
+                    <span>No visit cutoff deadline assigned yet for this inspection report.</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignWindowModal(true)}
+                    className="px-2.5 py-1 text-xs font-bold text-[#00355f] bg-white border border-[#00355f]/30 rounded-lg hover:bg-[#e7f0f8]"
+                  >
+                    Set Visit Window Deadline
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -1582,6 +1849,132 @@ export function InspectionReportModal({
 
               <div className="p-3 bg-[#0f172a] border-t border-[#334155] text-center text-[11px] text-[#94a3b8]">
                 <span>Official Forensic Telemetry Verification Evidence • Press ESC or click outside to dismiss</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* MODAL: OFFICER REQUEST UNLOCK */}
+        {showUnlockModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999]">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-[#cbd5e1] space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-2 border-b border-[#E5E7EB]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#00355f] text-white flex items-center justify-center">
+                    <KeyRound size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-[#00355f]">Request Administrator Unlock</h3>
+                    <p className="text-[11px] text-[#64748b]">Submit formal justification to modify locked report</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowUnlockModal(false)}
+                  className="p-1 rounded text-[#94a3b8] hover:text-[#0f172a]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs text-[#42474f] leading-relaxed">
+                  The inspection visit window for report <strong className="font-mono text-[#00355f]">{currentReportId}</strong> has closed. Describe why revisions or supplementary evidence are needed. Your request will be routed directly to the regional administrator.
+                </p>
+
+                <div>
+                  <label className="text-xs font-bold text-[#191c1e] block mb-1">
+                    Justification / Reason for Revision <span className="text-[#D32F2F]">*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={unlockReasonInput}
+                    onChange={(e) => setUnlockReasonInput(e.target.value)}
+                    placeholder="e.g. Received late laboratory water quality analysis, need to append photo proof of secondary bypass drain..."
+                    className="w-full bg-[#f8f9fb] border border-[#E5E7EB] rounded-lg p-2.5 text-xs text-[#191c1e] focus:outline-none focus:border-[#00355f]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setShowUnlockModal(false)}
+                  className="px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#42474f] hover:bg-[#edeef0]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRequestUnlock}
+                  disabled={submittingUnlockReq}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#00355f] text-white rounded-lg text-xs font-bold hover:bg-[#0f4c81] disabled:opacity-50"
+                >
+                  <Send size={13} />
+                  <span>{submittingUnlockReq ? 'Submitting...' : 'Submit Request'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: ADMIN ASSIGN / EXTEND VISIT WINDOW */}
+        {showAssignWindowModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999]">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-[#cbd5e1] space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-2 border-b border-[#E5E7EB]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#00355f] text-white flex items-center justify-center">
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-[#00355f]">Set Visit Window Deadline</h3>
+                    <p className="text-[11px] text-[#64748b]">Enforce inspection cutoff time limit</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAssignWindowModal(false)}
+                  className="p-1 rounded text-[#94a3b8] hover:text-[#0f172a]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs text-[#42474f] leading-relaxed">
+                  Specify when the physical inspection visit concludes. Once this timestamp is reached, the report will automatically lock to ensure field officer reports cannot be retroactively altered without permission.
+                </p>
+
+                <div>
+                  <label className="text-xs font-bold text-[#191c1e] block mb-1">
+                    Visit Cutoff Deadline <span className="text-[#D32F2F]">*</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={windowCloseInput}
+                    onChange={(e) => setWindowCloseInput(e.target.value)}
+                    className="w-full bg-[#f8f9fb] border border-[#E5E7EB] rounded-lg p-2.5 text-xs text-[#191c1e] font-semibold focus:outline-none focus:border-[#00355f]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignWindowModal(false)}
+                  className="px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#42474f] hover:bg-[#edeef0]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAssignWindow}
+                  disabled={submittingWindowAssign}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#00355f] text-white rounded-lg text-xs font-bold hover:bg-[#0f4c81] disabled:opacity-50"
+                >
+                  <CheckCircle2 size={13} />
+                  <span>{submittingWindowAssign ? 'Saving...' : 'Set Deadline'}</span>
+                </button>
               </div>
             </div>
           </div>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Shield, Settings, Check, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, Settings, Check, AlertCircle, KeyRound, Unlock, Lock, Clock, CheckCircle2, Eye } from 'lucide-react';
 import { AddFactoryModal } from './AddFactoryModal';
 import { ModelVersionsTab } from './ModelVersionsTab';
 import { ThresholdSettingsTab } from './ThresholdSettingsTab';
+import { InspectionReportModal } from './InspectionReportModal';
 import { apiFetch } from '../config';
 
 export function AdminPortalPage({ onNavigate }) {
@@ -10,6 +11,9 @@ export function AdminPortalPage({ onNavigate }) {
   const [factories, setFactories] = useState([]);
   const [users, setUsers] = useState([]);
   const [consentLimits, setConsentLimits] = useState([]);
+  const [unlockRequests, setUnlockRequests] = useState([]);
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [districtFilter, setDistrictFilter] = useState('');
@@ -75,6 +79,17 @@ export function AdminPortalPage({ onNavigate }) {
         else { setConsentLimits([]); flags.consentLimits = true; }
       } else { setConsentLimits([]); flags.consentLimits = true; }
 
+      // GET /api/reports/unlock/requests - pending officer unlock requests
+      try {
+        const uqRes = await apiFetch('/api/reports/unlock/requests');
+        if (uqRes.ok) {
+          const uqData = await uqRes.json();
+          setUnlockRequests(uqData.requests || []);
+        }
+      } catch (e) {
+        console.error('Failed to load unlock requests:', e);
+      }
+
       setDemoFlags(flags);
     } catch (err) {
       setFactories(getFallbackFactories());
@@ -98,6 +113,24 @@ export function AdminPortalPage({ onNavigate }) {
     } catch (err) {
       console.error('Error deleting factory:', err);
       alert(`Failed to remove factory ${factoryId}. Couldn't reach the backend -- nothing was deleted.`);
+    }
+  };
+
+  const handleApproveUnlock = async (reportId, hours = 24) => {
+    try {
+      const res = await apiFetch(`/api/reports/${reportId}/grant-unlock`, {
+        method: 'POST',
+        body: JSON.stringify({ unlock_duration_hours: hours })
+      });
+      if (res.ok) {
+        fetchAdminData();
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Failed to authorize unlock.');
+      }
+    } catch (err) {
+      console.error('Error approving unlock:', err);
+      alert('Network error authorizing unlock.');
     }
   };
 
@@ -129,6 +162,11 @@ export function AdminPortalPage({ onNavigate }) {
         <div className="flex flex-wrap border-b border-[#E5E7EB] bg-[#f8f9fb] px-4">
           {[
             { id: 'factories', label: 'Factories' },
+            { 
+              id: 'unlock-requests', 
+              label: 'Unlock Requests', 
+              badgeCount: unlockRequests.length 
+            },
             { id: 'users', label: 'Users' },
             { id: 'consent-limits', label: 'Consent Limits' },
             { id: 'models', label: 'Model Versions' },
@@ -137,13 +175,18 @@ export function AdminPortalPage({ onNavigate }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-4 font-label-caps text-[13px] tracking-wider transition-colors border-b-2 font-bold ${
+              className={`px-6 py-4 font-label-caps text-[13px] tracking-wider transition-colors border-b-2 font-bold flex items-center gap-2 ${
                 activeTab === tab.id 
                   ? 'border-[#00355f] text-[#00355f] bg-white' 
                   : 'border-transparent text-[#42474f] hover:text-[#00355f]'
               }`}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              {tab.badgeCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#D32F2F] text-white">
+                  {tab.badgeCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -232,6 +275,89 @@ export function AdminPortalPage({ onNavigate }) {
           </div>
         )}
 
+        {/* Tab: Unlock Requests */}
+        {activeTab === 'unlock-requests' && (
+          <div className="p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E5E7EB] pb-4">
+              <div>
+                <h3 className="font-headline-md text-headline-md text-[#00355f] flex items-center gap-2">
+                  <KeyRound size={20} />
+                  <span>Field Inspector Report Unlock Requests</span>
+                </h3>
+                <p className="text-body-sm text-[#727780] mt-0.5">
+                  Formal requests submitted by field inspectors to modify locked inspection reports after visit time elapsed.
+                </p>
+              </div>
+              <div className="text-xs font-mono bg-[#00355f]/10 text-[#00355f] font-bold px-3 py-1.5 rounded-lg shrink-0">
+                {unlockRequests.length} Pending Authorization
+              </div>
+            </div>
+
+            {unlockRequests.length === 0 ? (
+              <div className="p-12 text-center bg-[#f8f9fb] rounded-xl border border-dashed border-[#E5E7EB] space-y-2">
+                <CheckCircle2 size={32} className="mx-auto text-[#1b6d24]" />
+                <p className="font-bold text-xs text-[#191c1e]">No Pending Unlock Requests</p>
+                <p className="text-xs text-[#727780] max-w-md mx-auto">
+                  All field inspection verification reports are currently adhering to assigned visit windows. Reports are locked post-visit to enforce audit chain of custody.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-[#E5E7EB] rounded-xl">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#f8f9fb] border-b border-[#E5E7EB]">
+                      <th className="px-6 py-3 font-label-caps text-[11px] text-[#42474f] uppercase">Report ID</th>
+                      <th className="px-6 py-3 font-label-caps text-[11px] text-[#42474f] uppercase">Target Facility</th>
+                      <th className="px-6 py-3 font-label-caps text-[11px] text-[#42474f] uppercase">Inspector</th>
+                      <th className="px-6 py-3 font-label-caps text-[11px] text-[#42474f] uppercase">Requested Justification</th>
+                      <th className="px-6 py-3 font-label-caps text-[11px] text-[#42474f] uppercase">Requested At</th>
+                      <th className="px-6 py-3 font-label-caps text-[11px] text-[#42474f] uppercase text-right">Administrative Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-table-data">
+                    {unlockRequests.map((req) => (
+                      <tr key={req.report_id} className="border-b border-[#E5E7EB] table-row-hover">
+                        <td className="px-6 py-3.5 font-bold font-mono text-[#00355f]">{req.report_id}</td>
+                        <td className="px-6 py-3.5 font-bold text-[#191c1e]">{req.factory_name}</td>
+                        <td className="px-6 py-3.5 text-[#42474f]">{req.inspector_name || req.inspector_id}</td>
+                        <td className="px-6 py-3.5 text-xs text-[#191c1e] max-w-xs">
+                          <span className="italic bg-[#fff8e6] text-[#8F6400] px-2 py-1 rounded border border-[#8F6400]/20 block">
+                            "{req.unlock_requested_reason}"
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5 text-xs text-[#727780]">
+                          {req.unlock_requested_at ? new Date(req.unlock_requested_at).toLocaleString() : 'N/A'}
+                        </td>
+                        <td className="px-6 py-3.5 text-right space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedReportId(req.report_id);
+                              setShowReportModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#00355f] bg-[#e7f0f8] rounded-lg hover:bg-[#d5e7f6] transition-colors"
+                          >
+                            <Eye size={13} />
+                            <span>Inspect</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveUnlock(req.report_id, 24)}
+                            className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold text-white bg-[#1b6d24] rounded-lg hover:bg-[#14521b] transition-colors shadow-xs"
+                          >
+                            <Unlock size={13} />
+                            <span>Authorize 24h</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tab 2: Users */}
         {activeTab === 'users' && (
           <div className="overflow-x-auto">
@@ -289,6 +415,20 @@ export function AdminPortalPage({ onNavigate }) {
           <ThresholdSettingsTab />
         )}
       </div>
+
+      {showReportModal && selectedReportId && (
+        <InspectionReportModal
+          isOpen={showReportModal}
+          onClose={() => {
+            setShowReportModal(false);
+            setSelectedReportId(null);
+            fetchAdminData();
+          }}
+          reportId={selectedReportId}
+          currentUser={{ role: 'admin', username: 'Administrator' }}
+          onReportSaved={() => fetchAdminData()}
+        />
+      )}
 
       {showAddFactoryModal && (
         <AddFactoryModal

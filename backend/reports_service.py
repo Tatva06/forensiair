@@ -91,7 +91,15 @@ def init_reports_tables():
         # Safe non-destructive column migrations for existing databases
         for col_name, col_type in [
             ("ai_confirmation", "TEXT"),
-            ("ai_prediction_snapshot", "TEXT")
+            ("ai_prediction_snapshot", "TEXT"),
+            ("assigned_by", "TEXT"),
+            ("window_open_at", "TEXT"),
+            ("window_close_at", "TEXT"),
+            ("locked_at", "TEXT"),
+            ("unlock_requested_at", "TEXT"),
+            ("unlock_requested_reason", "TEXT"),
+            ("unlock_granted_by", "TEXT"),
+            ("unlock_expires_at", "TEXT")
         ]:
             try:
                 cursor.execute(f"ALTER TABLE inspection_reports ADD COLUMN {col_name} {col_type};")
@@ -101,6 +109,49 @@ def init_reports_tables():
         conn.commit()
     finally:
         conn.close()
+
+
+def parse_iso_dt(dt_str: Optional[str]) -> Optional[datetime.datetime]:
+    """Safely parses ISO timestamp into UTC-aware datetime object."""
+    if not dt_str:
+        return None
+    try:
+        clean = dt_str.replace("Z", "+00:00")
+        dt = datetime.datetime.fromisoformat(clean)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def is_report_locked(report: Dict[str, Any]) -> bool:
+    """
+    Determines if an inspection report is locked due to the inspection visit window closing.
+    A report is locked if:
+      - window_close_at is configured AND current UTC time > window_close_at
+      - AND (unlock_expires_at is None OR current UTC time > unlock_expires_at)
+    """
+    close_at_str = report.get("window_close_at")
+    if not close_at_str:
+        return False
+        
+    close_dt = parse_iso_dt(close_at_str)
+    if not close_dt:
+        return False
+        
+    now_dt = datetime.datetime.now(datetime.timezone.utc)
+    if now_dt <= close_dt:
+        return False  # Window still active
+        
+    # Check if admin override unlock is active
+    unlock_exp_str = report.get("unlock_expires_at")
+    if unlock_exp_str:
+        exp_dt = parse_iso_dt(unlock_exp_str)
+        if exp_dt and now_dt <= exp_dt:
+            return False  # Active admin unlock override
+            
+    return True
 
 
 def find_alert_details(alert_id: str) -> Optional[Dict[str, Any]]:
@@ -300,6 +351,13 @@ def update_report(
             "Request further information or create an amendment revision instead."
         )
 
+    if is_report_locked(existing):
+        raise ValueError(
+            f"Cannot directly edit report '{report_id}' because its visit/reporting window closed at "
+            f"'{existing.get('window_close_at')}'. The report is locked. "
+            "Request an administrator unlock to make any further additions or changes."
+        )
+
     now_iso = datetime.datetime.utcnow().isoformat()
     conn = get_db_connection()
     try:
@@ -345,13 +403,25 @@ def update_report(
             "status": existing["status"]
         }
 
+        # Log Revision (flag if edit is performed under an active admin override unlock)
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
+        unlock_exp = parse_iso_dt(existing.get("unlock_expires_at"))
+        is_admin_override = bool(existing.get("window_close_at") and unlock_exp and now_dt <= unlock_exp)
+
+        action_name = "post_unlock_edit" if is_admin_override else "updated_draft"
+        summary_text = (
+            f"Post-unlock edit by {actor_id or existing['inspector_id']} (Admin override active until {existing.get('unlock_expires_at')})"
+            if is_admin_override else
+            f"Draft updated by {actor_id or existing['inspector_id']}"
+        )
+
         conn.execute("""
             INSERT INTO report_revisions (
                 report_id, revision_number, action, actor_id, actor_role, summary, snapshot_json, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            report_id, rev_count + 1, "updated_draft", actor_id or existing["inspector_id"], "inspector",
-            f"Draft updated by {actor_id or existing['inspector_id']}",
+            report_id, rev_count + 1, action_name, actor_id or existing["inspector_id"], "inspector",
+            summary_text,
             json.dumps(snapshot), now_iso
         ))
 
@@ -538,6 +608,15 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
             "submitted_at": row["submitted_at"],
             "ai_confirmation": row["ai_confirmation"] if "ai_confirmation" in row.keys() else None,
             "ai_prediction_snapshot": json.loads(row["ai_prediction_snapshot"]) if "ai_prediction_snapshot" in row.keys() and row["ai_prediction_snapshot"] else None,
+            "assigned_by": row["assigned_by"] if "assigned_by" in row.keys() else None,
+            "window_open_at": row["window_open_at"] if "window_open_at" in row.keys() else None,
+            "window_close_at": row["window_close_at"] if "window_close_at" in row.keys() else None,
+            "locked_at": row["locked_at"] if "locked_at" in row.keys() else None,
+            "unlock_requested_at": row["unlock_requested_at"] if "unlock_requested_at" in row.keys() else None,
+            "unlock_requested_reason": row["unlock_requested_reason"] if "unlock_requested_reason" in row.keys() else None,
+            "unlock_granted_by": row["unlock_granted_by"] if "unlock_granted_by" in row.keys() else None,
+            "unlock_expires_at": row["unlock_expires_at"] if "unlock_expires_at" in row.keys() else None,
+            "is_locked": is_report_locked(dict(row)),
             "revisions": revisions,
             "linked_alert": alert_info
         }
@@ -596,6 +675,14 @@ def list_reports(
                 "status": row["status"],
                 "ai_confirmation": row["ai_confirmation"] if "ai_confirmation" in row.keys() else None,
                 "ai_prediction_snapshot": json.loads(row["ai_prediction_snapshot"]) if "ai_prediction_snapshot" in row.keys() and row["ai_prediction_snapshot"] else None,
+                "assigned_by": row["assigned_by"] if "assigned_by" in row.keys() else None,
+                "window_open_at": row["window_open_at"] if "window_open_at" in row.keys() else None,
+                "window_close_at": row["window_close_at"] if "window_close_at" in row.keys() else None,
+                "unlock_requested_at": row["unlock_requested_at"] if "unlock_requested_at" in row.keys() else None,
+                "unlock_requested_reason": row["unlock_requested_reason"] if "unlock_requested_reason" in row.keys() else None,
+                "unlock_granted_by": row["unlock_granted_by"] if "unlock_granted_by" in row.keys() else None,
+                "unlock_expires_at": row["unlock_expires_at"] if "unlock_expires_at" in row.keys() else None,
+                "is_locked": is_report_locked(dict(row)),
                 "admin_notes": row["admin_notes"],
                 "admin_decision": row["admin_decision"],
                 "reviewed_by": row["reviewed_by"],
@@ -629,5 +716,188 @@ def get_alert_report_statuses() -> Dict[str, Dict[str, Any]]:
                 "inspection_date": r["inspection_date"]
             }
         return res
+    finally:
+        conn.close()
+
+
+def assign_window(
+    report_id: str,
+    window_close_at: str,
+    window_open_at: Optional[str] = None,
+    assigned_by: Optional[str] = None,
+    actor_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Admin assigns or updates the allowed edit window for an inspection visit report.
+    Once window_close_at is reached, the report auto-locks to prevent post-visit modification.
+    """
+    existing = get_report(report_id)
+    if not existing:
+        raise KeyError(f"Report '{report_id}' not found.")
+
+    now_iso = datetime.datetime.utcnow().isoformat()
+    conn = get_db_connection()
+    try:
+        open_at = window_open_at or now_iso
+        admin_identifier = assigned_by or actor_id or "admin"
+        conn.execute("""
+            UPDATE inspection_reports SET
+                assigned_by = ?,
+                window_open_at = ?,
+                window_close_at = ?,
+                updated_at = ?
+            WHERE report_id = ?
+        """, (admin_identifier, open_at, window_close_at, now_iso, report_id))
+
+        rev_count = conn.execute(
+            "SELECT COUNT(*) FROM report_revisions WHERE report_id = ?", (report_id,)
+        ).fetchone()[0]
+
+        snapshot = {
+            "report_id": report_id,
+            "window_open_at": open_at,
+            "window_close_at": window_close_at,
+            "assigned_by": admin_identifier
+        }
+
+        conn.execute("""
+            INSERT INTO report_revisions (
+                report_id, revision_number, action, actor_id, actor_role, summary, snapshot_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            report_id, rev_count + 1, "window_assigned", admin_identifier, "admin",
+            f"Inspection visit window assigned: editing permitted until {window_close_at}",
+            json.dumps(snapshot), now_iso
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return get_report(report_id)
+
+
+def request_unlock(
+    report_id: str,
+    reason: str,
+    actor_id: str
+) -> Dict[str, Any]:
+    """
+    Field inspector submits a formal request to unlock an expired/locked inspection report.
+    """
+    existing = get_report(report_id)
+    if not existing:
+        raise KeyError(f"Report '{report_id}' not found.")
+
+    if not reason or not reason.strip():
+        raise ValueError("A clear justification reason is required to request an administrator unlock.")
+
+    now_iso = datetime.datetime.utcnow().isoformat()
+    conn = get_db_connection()
+    try:
+        clean_reason = reason.strip()
+        conn.execute("""
+            UPDATE inspection_reports SET
+                unlock_requested_at = ?,
+                unlock_requested_reason = ?,
+                updated_at = ?
+            WHERE report_id = ?
+        """, (now_iso, clean_reason, now_iso, report_id))
+
+        rev_count = conn.execute(
+            "SELECT COUNT(*) FROM report_revisions WHERE report_id = ?", (report_id,)
+        ).fetchone()[0]
+
+        conn.execute("""
+            INSERT INTO report_revisions (
+                report_id, revision_number, action, actor_id, actor_role, summary, snapshot_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            report_id, rev_count + 1, "unlock_requested", actor_id, "inspector",
+            f"Inspector requested edit unlock: {clean_reason[:80]}",
+            json.dumps({"reason": clean_reason, "requested_at": now_iso}), now_iso
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return get_report(report_id)
+
+
+def grant_unlock(
+    report_id: str,
+    admin_id: str,
+    unlock_duration_hours: int = 24
+) -> Dict[str, Any]:
+    """
+    Administrator approves an unlock request, granting a time-limited override window (default 24h).
+    """
+    existing = get_report(report_id)
+    if not existing:
+        raise KeyError(f"Report '{report_id}' not found.")
+
+    now = datetime.datetime.utcnow()
+    now_iso = now.isoformat()
+    exp_dt = now + datetime.timedelta(hours=unlock_duration_hours)
+    exp_iso = exp_dt.isoformat()
+
+    conn = get_db_connection()
+    try:
+        conn.execute("""
+            UPDATE inspection_reports SET
+                unlock_granted_by = ?,
+                unlock_expires_at = ?,
+                unlock_requested_at = NULL,
+                updated_at = ?
+            WHERE report_id = ?
+        """, (admin_id, exp_iso, now_iso, report_id))
+
+        rev_count = conn.execute(
+            "SELECT COUNT(*) FROM report_revisions WHERE report_id = ?", (report_id,)
+        ).fetchone()[0]
+
+        conn.execute("""
+            INSERT INTO report_revisions (
+                report_id, revision_number, action, actor_id, actor_role, summary, snapshot_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            report_id, rev_count + 1, "unlock_granted", admin_id, "admin",
+            f"Admin {admin_id} authorized edit unlock for {unlock_duration_hours}h (expires {exp_iso})",
+            json.dumps({"granted_by": admin_id, "expires_at": exp_iso, "duration_hours": unlock_duration_hours}), now_iso
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return get_report(report_id)
+
+
+def list_unlock_requests() -> List[Dict[str, Any]]:
+    """
+    Retrieves reports with active, pending inspector unlock requests.
+    """
+    conn = get_db_connection()
+    try:
+        rows = conn.execute("""
+            SELECT report_id, alert_id, factory_id, factory_name, inspector_id, inspector_name,
+                   window_close_at, unlock_requested_at, unlock_requested_reason
+            FROM inspection_reports
+            WHERE unlock_requested_at IS NOT NULL
+            ORDER BY unlock_requested_at DESC
+        """).fetchall()
+
+        results = []
+        for r in rows:
+            results.append({
+                "report_id": r["report_id"],
+                "alert_id": r["alert_id"],
+                "factory_id": r["factory_id"],
+                "factory_name": r["factory_name"],
+                "inspector_id": r["inspector_id"],
+                "inspector_name": r["inspector_name"],
+                "window_close_at": r["window_close_at"],
+                "unlock_requested_at": r["unlock_requested_at"],
+                "unlock_requested_reason": r["unlock_requested_reason"]
+            })
+        return results
     finally:
         conn.close()
